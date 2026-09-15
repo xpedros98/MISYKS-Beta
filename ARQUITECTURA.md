@@ -1116,6 +1116,31 @@ se puede auditar y cerrar (como el hallazgo del puerto 3000 de arriba), no uno q
 depende de la política de un tercero en otra jurisdicción. Decisión de arquitectura
 (local vs. `maat`) pendiente de que el usuario la zanje.
 
+**Decisión tomada: el resumen se genera con Ollama en `maat`, modelo `qwen2.5:7b`.**
+`maat` no tiene GPU (solo el chip grafico de gestion remota del servidor) -- Ollama
+corre en CPU pura, 12 nucleos, 62GB RAM. Comparado con datos reales antes de decidir:
+
+| modelo | vel. (caliente) | 10 peticiones a la vez (peor caso) | calidad ES |
+|---|---|---|---|
+| `llama3.2:3b` | ~17 tok/s | 2.1s - 21.8s | pierde matices con >1 tema en el correo |
+| `qwen2.5:7b` | ~7.6 tok/s | 4.0s - 36.6s | correcto, registro consistente |
+| `llama3.1:8b` | ~7.3 tok/s (igual que qwen) | no probado | **error de sentido**: invirtio el significado de un correo con dos temas, y mezclo tu/usted a media frase |
+
+A igual velocidad, Qwen acierta y Llama no -- por eso se descarta Llama pese a ser de la
+misma familia que otros usos ya existentes en el ecosistema antiguo (`gemma3:12b` en
+`~/maat/`). Los tres modelos probados sostienen 10 peticiones simultaneas sin fallar
+(la cola de Ollama por defecto ya lo resuelve), aceptable porque el resumen se genera
+en segundo plano, sin bloquear al usuario mientras sincroniza.
+
+**Keep-warm.** Ollama descarga un modelo de RAM tras ~5 min sin uso; la siguiente
+peticion paga el coste de recargarlo de disco (~3.4s en el caso mas ligero probado).
+`Backend/scripts/ollama_keep_warm.py` manda una peticion minima (1 token) cada 4
+minutos via cron en `maat`, para que ninguna peticion real caiga nunca sobre un modelo
+frio. Mismo mecanismo que ya usa el ecosistema antiguo (`~/maat/scripts/`, para
+`gemma3:12b`) pero independiente: script y cron propios de este repo, sin depender de
+la automatizacion ajena (esa, de hecho, esta rota -- `gemma3:12b` ya no esta descargado
+en el servidor, asi que ese cron lleva tiempo fallando en silencio).
+
 ---
 
 ## 9 · Alcance
