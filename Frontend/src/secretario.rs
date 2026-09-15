@@ -29,6 +29,7 @@ pub enum SecMailError {
     DbNotFound(String),
     Sqlite(String),
     Io(String),
+    Sincronizacion(String),
 }
 
 impl std::fmt::Display for SecMailError {
@@ -36,13 +37,58 @@ impl std::fmt::Display for SecMailError {
         match self {
             SecMailError::DbNotFound(path) => write!(
                 f,
-                "No existe la base de datos en {path}. Sincroniza primero con el agente Python \
-                 (python -m sec.mail sincronizar), tras rellenar las credenciales en Ajustes."
+                "No existe la base de datos en {path} todavia. Pulsa Refrescar para sincronizar."
             ),
             SecMailError::Sqlite(msg) => write!(f, "Error al leer la base de datos: {msg}"),
             SecMailError::Io(msg) => write!(f, "Error de E/S en la configuracion local: {msg}"),
+            SecMailError::Sincronizacion(msg) => write!(f, "Fallo al sincronizar: {msg}"),
         }
     }
+}
+
+/// Ruta a Backend/ asumiendo que Frontend/ y Backend/ son carpetas hermanas
+/// dentro del mismo checkout del repo (cierto durante desarrollo). Cuando la
+/// app se distribuya como binario empaquetado esto tendra que resolverse de
+/// otra forma -- no es el caso todavia.
+fn backend_dir() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Frontend/ deberia tener un padre")
+        .join("Backend")
+}
+
+/// Invoca `python -m sec.mail sincronizar` en local, en tandas de `limite`
+/// correos (los mas antiguos sin descargar todavia). Necesita que Ajustes ya
+/// haya guardado usuario/password de Gmail en ~/.misyks/config -- si faltan,
+/// sec.mail lo dira con su propio mensaje de error (RuntimeError de Python),
+/// que se devuelve tal cual. No hay riesgo de duplicar: `guardar_correo`
+/// ignora un gmail_msgid que ya estuviera guardado (UNIQUE en la tabla).
+pub fn sincronizar(limite: i64) -> Result<String, SecMailError> {
+    // Genera la clave de la base ANTES de invocar a Python: config.clave_db()
+    // (Python) solo lee, nunca genera -- si no existe todavia (primera vez,
+    // sin base creada aun) Python fallaria con un error confuso.
+    LocalConfig::load()
+        .clave_db_o_generarla()
+        .map_err(|e| SecMailError::Io(e.to_string()))?;
+
+    let backend = backend_dir();
+    let python = backend.join(".venv/bin/python3");
+    let salida = std::process::Command::new(&python)
+        .args(["-m", "sec.mail", "sincronizar", "--limite", &limite.to_string()])
+        .current_dir(&backend)
+        .output()
+        .map_err(|e| {
+            SecMailError::Sincronizacion(format!(
+                "no se pudo lanzar {}: {e}",
+                python.display()
+            ))
+        })?;
+
+    if !salida.status.success() {
+        let stderr = String::from_utf8_lossy(&salida.stderr);
+        return Err(SecMailError::Sincronizacion(stderr.trim().to_string()));
+    }
+    Ok(String::from_utf8_lossy(&salida.stdout).trim().to_string())
 }
 
 pub fn list_emails(limit: i64) -> Result<Vec<EmailSummary>, SecMailError> {

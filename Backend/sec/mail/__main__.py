@@ -1,8 +1,8 @@
 """Línea de órdenes de sec.mail. Se ejecuta desde la carpeta Backend:
 
-    python -m sec.mail carpetas               lista las carpetas de Gmail
-    python -m sec.mail sincronizar [CARPETA]  guarda los correos nuevos (por defecto INBOX)
-    python -m sec.mail listar [N]             muestra los últimos N correos guardados
+    python -m sec.mail carpetas                        lista las carpetas de Gmail
+    python -m sec.mail sincronizar [CARPETA] [-n N]    guarda los correos nuevos (por defecto INBOX, sin limite)
+    python -m sec.mail listar [N]                       muestra los últimos N correos guardados
     python -m sec.mail leido ID               marca un correo como leído en Gmail
     python -m sec.mail mover ID CARPETA       mueve un correo a otra carpeta de Gmail
 
@@ -21,6 +21,7 @@ def main():
     sub.add_parser("carpetas", help="lista las carpetas de Gmail")
     s = sub.add_parser("sincronizar", help="guarda los correos nuevos de una carpeta")
     s.add_argument("carpeta", nargs="?", default="INBOX")
+    s.add_argument("-n", "--limite", type=int, default=None, help="maximo de correos nuevos a traer en esta tanda")
     s = sub.add_parser("listar", help="muestra los últimos correos guardados")
     s.add_argument("n", nargs="?", type=int, default=20)
     s = sub.add_parser("leido", help="marca un correo como leído en Gmail")
@@ -43,7 +44,8 @@ def ejecutar(args):
             for c in agente.carpetas():
                 print(f"{c['nombre']:<30} {' '.join(c['marcas'])}")
         elif args.orden == "sincronizar":
-            print(f"{agente.sincronizar(args.carpeta)} correos nuevos guardados de {args.carpeta}.")
+            nuevos = agente.sincronizar(args.carpeta, limite=args.limite)
+            print(f"{nuevos} correos nuevos guardados de {args.carpeta}.")
         elif args.orden == "listar":
             for f in agente.listar(args.n):
                 estado = "leído   " if f["leido"] else "sin leer"

@@ -16,8 +16,15 @@ class SecMail:
         with self._gmail() as gmail:
             return gmail.carpetas()
 
-    def sincronizar(self, carpeta="INBOX"):
+    def sincronizar(self, carpeta="INBOX", limite=None):
         """Guarda los correos nuevos de una carpeta sin marcarlos como leídos.
+
+        `limite` corta la tanda a los primeros N UIDs pendientes (los más
+        antiguos sin descargar todavía) en vez de traer toda la carpeta de
+        golpe; el puntero avanza correo a correo, así que la siguiente
+        llamada sigue exactamente donde esta se quedó. `guardar_correo`
+        ignora los que ya estén guardados (UNIQUE en gmail_msgid), así que
+        repetir un UID nunca duplica una fila.
 
         Devuelve cuántos correos se guardaron por primera vez.
         """
@@ -27,7 +34,10 @@ class SecMail:
             validez_guardada, ultimo_uid = self.db.estado(carpeta)
             if validez_guardada != uidvalidity:  # UIDs reiniciados en el servidor: se recorre entera
                 ultimo_uid = 0
-            for uid in gmail.uids_desde(ultimo_uid):
+            pendientes = gmail.uids_desde(ultimo_uid)
+            if limite is not None:
+                pendientes = pendientes[:limite]
+            for uid in pendientes:
                 descarga = gmail.descargar(uid)
                 if descarga is not None:
                     correo = parser.parsear(descarga["eml"])
