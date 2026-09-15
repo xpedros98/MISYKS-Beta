@@ -1001,8 +1001,15 @@ servidor.
 | credenciales y clave de la base | `sec/mail/config.py` |
 | CLI | `sec/mail/__main__.py` |
 
-Superficie: `carpetas · sincronizar · listar · marcar_leido · mover`.
+Superficie: `carpetas · sincronizar [--limite N] · listar · marcar_leido · mover`.
 Tablas: `correos · adjuntos · sincronizacion · acciones`.
+
+Frontend (`iced`): botón **Refrescar** en la pantalla Secretario invoca
+`sincronizar --limite 5` como subproceso y recarga la lista; se dispara también
+solo al guardar credenciales válidas en Ajustes. El límite de la tanda de
+descarga (5) y el límite de la lista mostrada (sin límite: se ve todo lo ya
+guardado) son valores independientes -- confundirlos fue un bug real de esta
+sesión, ya corregido.
 
 Decisiones que conviene no perder:
 
@@ -1016,6 +1023,10 @@ Decisiones que conviene no perder:
   sigue viendo su bandeja intacta desde sus propios dispositivos.
 - **Avance correo a correo.** El puntero se guarda tras cada mensaje, así que una
   interrupción no pierde trabajo ni lo repite.
+- **Sincronización en tandas.** `--limite N` corta la llamada a los N UIDs pendientes
+  más antiguos en vez de traer todo el histórico de golpe; como el puntero avanza
+  correo a correo, la siguiente tanda sigue justo donde la anterior se quedó, sin
+  duplicar nada (`guardar_correo` ya ignora un `gmail_msgid` repetido).
 - **Secretos en local, sin llavero del sistema.** Usuario y contraseña de aplicación
   de Gmail (sección `[gmail]`) y clave de la base (sección `[secmail]`) viven en
   `~/.misyks/config`, junto a la base `~/.misyks/sec_mail.db`. Fuera del repo, para que
