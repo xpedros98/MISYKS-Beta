@@ -1072,6 +1072,44 @@ la implementación actual usa extensiones de Gmail (`X-GM-MSGID`, `X-GM-LABELS`)
 `imap.gmail.com`: llevarla a otro proveedor exige sustituir esa identidad estable (por
 `Message-ID` o UID) y la lectura de etiquetas.
 
+### 8.4 · Infraestructura: `maat` — hallazgo de seguridad pendiente
+
+Auditoría real del firewall de `maat` (iptables/ufw), hecha al evaluar si un futuro
+resumen de `sec.mail` por LLM podía generarse ahí en vez de en local (ver discusión de
+privacidad más abajo). El resto del firewall está bien planteado -- política DROP por
+defecto, Redis/Qdrant/Memgraph solo en `127.0.0.1`, Ollama (11434) escuchando en todas
+las interfaces pero solo alcanzable desde la subred Docker interna `10.0.2.0/24` -- pero
+hay un fallo concreto:
+
+- **El puerto 3000 (`agents-api`, el backend real) está expuesto a todo internet**, no
+  solo alcanzable vía Traefik como parece que se pretendía. Causa: dos reglas de
+  iptables para el mismo puerto en orden equivocado -- una `ACCEPT` desde cualquier
+  origen (`0.0.0.0/0`) se evalúa *antes* que la `DROP` que debería bloquear el acceso
+  público, así que la de bloqueo nunca llega a aplicarse (iptables para en la primera
+  regla que coincide).
+- **Por qué no es crítico ahora mismo:** las rutas de `agents-api` exigen
+  `x-internal-key` + JWT de Clerk (ver `server.ts`), así que llegar al puerto no basta
+  para leer nada. El riesgo real es que cualquier fallo del propio servicio (una
+  vulnerabilidad de dependencia, un endpoint mal protegido que se añada más adelante)
+  queda expuesto directamente a cualquiera en internet, sin pasar por Traefik.
+- **Arreglo, una línea, pendiente de ejecutar (requiere acceso root a `maat`):**
+  ```
+  iptables -D INPUT -p tcp --dport 3000 -j ACCEPT
+  ```
+  Borra la regla de "permitir desde cualquiera"; la regla `DROP` que ya existe justo
+  detrás queda entonces activa de verdad.
+
+**Contexto de la decisión LLM local vs. servidor:** se comparó enviar el contenido de
+sec.mail a una API externa (DeepSeek) frente a generarlo con Ollama en `maat`. DeepSeek
+almacena datos en China, sin DPA ni residencia UE/US -- se considera transferencia
+internacional bajo RGPD, y ya ha sido bloqueado de emergencia en Italia por su autoridad
+de protección de datos. `maat` está en Helsinki (Hetzner, UE/EEE): enviarle datos desde
+España no es una transferencia internacional a efectos de RGPD. Sigue siendo un riesgo
+real (quien tenga o consiga acceso al servidor), pero de una categoría distinta: uno que
+se puede auditar y cerrar (como el hallazgo del puerto 3000 de arriba), no uno que
+depende de la política de un tercero en otra jurisdicción. Decisión de arquitectura
+(local vs. `maat`) pendiente de que el usuario la zanje.
+
 ---
 
 ## 9 · Alcance
