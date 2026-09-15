@@ -7,6 +7,21 @@
 distingue entre lo implementado y lo pendiente salvo en §8.3, que recoge el estado
 real del código.
 
+**Normas de trabajo.**
+
+- **Nada de branches.** Se trabaja siempre directo sobre `main`. Sin ramas de
+  feature, sin PRs pendientes de fusionar: cada commit que llega a `main` ya
+  se considera el estado real del proyecto.
+- **Este documento se actualiza en el mismo cambio que lo motiva, no después.**
+  Cualquier commit que altere una decisión de arquitectura, el estado de un
+  sub-agente (§8.3) o el contrato de un grupo debe traer también el ajuste
+  correspondiente aquí. Un `ARQUITECTURA.md` desactualizado es peor que no
+  tenerlo: alguien lo lee y confía en algo que ya no es cierto.
+- **Detalle, no titulares.** Cuando algo cambie, se explica el porqué y las
+  consecuencias (qué se rompía antes, qué falla si se deshace), no solo el
+  qué. Un `Cambió X` sin contexto no ayuda a quien lo lea dentro de tres
+  meses.
+
 **Modelo.** Nueve grupos, no nueve agentes. Cada grupo es una familia de agentes muy
 acotados, cada uno con una sola tarea y un contrato estrecho. El grupo define el
 papel; los sub-agentes hacen el trabajo. Son 56 sub-agentes:
