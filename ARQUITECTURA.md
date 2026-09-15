@@ -240,15 +240,18 @@ cuando puede fallar solo y verificarse solo.
 La capa del despacho. Sabe recibir, clasificar, recordar y enviar; no sabe de plazos
 ni de derecho, y no toca ningún canal procesal.
 
-**`sec.mail`** — receptor · **implementado**
-Gmail sobre IMAP, base local cifrada con SQLCipher.
+**`sec.mail`** — receptor · **implementado** (lo que aún falta, en §8.3)
+Gmail sobre IMAP, base local cifrada con SQLCipher. Corre en el ordenador del
+letrado, no en el servidor: tiene la contraseña del correo y lee el contenido sin
+anonimizar, así que ese contenido no sale de su máquina.
 
 - **Contrato:** `{cuenta_imap, ventana}` → `{mensajes[], adjuntos[], resumen}`
 - **Reglas:**
   - IMAP y no POP: el correo permanece en el servidor y el letrado lo sigue viendo
     desde sus propios dispositivos. El agente lee, no vacía.
-  - **Idempotencia por `Message-ID`**: al reconectar no puede reprocesar lo ya visto.
-    Sin esto, una caída de red duplica expedientes.
+  - **Idempotencia por identidad estable del mensaje** (en Gmail, `X-GM-MSGID`) y,
+    por carpeta, por `UIDVALIDITY` + último UID: al reconectar no puede reprocesar lo
+    ya visto. Sin esto, una caída de red duplica expedientes.
   - Separa cuerpo y adjuntos como documentos distintos, y **desciende por los
     reenvíos anidados**: el documento relevante suele ir dentro de un forward, no en
     el primer nivel.
@@ -257,8 +260,8 @@ Gmail sobre IMAP, base local cifrada con SQLCipher.
     antes de resumir, nunca después.
 - **Falla si:** reprocesa tras reconectar; pierde el adjunto anidado; resume antes de
   extraer.
-- **Necesita:** credenciales (contraseña de aplicación u OAuth) e índice de
-  `Message-ID` procesados.
+- **Necesita:** credenciales (contraseña de aplicación u OAuth) y el estado de
+  sincronización de cada carpeta (`UIDVALIDITY` + último UID).
 
 **`sec.ocr`** — documentos fotografiados
 No escaneados: **fotografiados**. El cliente manda la foto del burofax con el móvil,
@@ -617,12 +620,12 @@ ocurre **antes** del pleito, **durante** y **después**.
 `1` siempre · `c` condicional · `0` no interviene
 
 **Disparadores:** letrado 59 · secretario 22 · workflow 6 · agenda 2
-**Destinos:** lexnet 59 · registro 12 · cliente 8 · notaría 6 · burofax 2 · smac 1 · comisaría 1
+**Destinos:** lexnet 59 · admin 12 · cliente 8 · notarial 6 · burofax 2 · smac 1 · policial 1
 
 Tres lecturas:
 
-- `archivador`, `procesal`, `redactor` y `critico` entran en los 89. Los otros cinco
-  son enrutables.
+- `secretario`, `archivador`, `procesal`, `redactor` y `critico` entran en los 89.
+  Los otros cuatro son enrutables.
 - El **secretario dispara 22 rutas**, y **17 de esas 22** son justo las que activan
   `est.contrario`. Recibir y rebatir son la misma cadena.
 - **LexNET sirve a 59 de 89.** Los otros 30 salen por los demás sub-agentes de
@@ -725,8 +728,9 @@ provision_fondos,G,letrado,1,1,1,0,0,1,0,1,c,cliente
 
 ## 6 · Doce rutas de referencia
 
-Una por patrón, nombrando sub-agentes. Cada uno de los 89 tipos hereda la ruta de su
-arquetipo.
+Una por patrón, nombrando sub-agentes. Cubren los arquetipos A–G: cada tipo de esos
+arquetipos hereda la ruta del suyo. Los 19 tipos de H, I y J aún no tienen ruta de
+referencia.
 
 ### A · Reactivos
 
@@ -984,7 +988,9 @@ sec.agenda           avisos de vencimiento, prórroga y actualización anual
 
 **Implementado — `sec.mail`**
 
-Primer sub-agente en producción. Gmail sobre IMAP con almacenamiento local cifrado.
+Primer sub-agente implementado. Gmail sobre IMAP con almacenamiento local cifrado.
+Corre en el ordenador del letrado; solo lo ya anonimizado sube a los agentes del
+servidor.
 
 | pieza | fichero |
 |---|---|
@@ -992,7 +998,7 @@ Primer sub-agente en producción. Gmail sobre IMAP con almacenamiento local cifr
 | cliente IMAP | `sec/mail/imap.py` |
 | parser de `.eml` | `sec/mail/parser.py` |
 | base SQLCipher | `sec/mail/db.py` |
-| credenciales y llavero | `sec/mail/config.py` |
+| credenciales y clave de la base | `sec/mail/config.py` |
 | CLI | `sec/mail/__main__.py` |
 
 Superficie: `carpetas · sincronizar · listar · marcar_leido · mover`.
@@ -1010,14 +1016,23 @@ Decisiones que conviene no perder:
   sigue viendo su bandeja intacta desde sus propios dispositivos.
 - **Avance correo a correo.** El puntero se guarda tras cada mensaje, así que una
   interrupción no pierde trabajo ni lo repite.
-- **Secretos repartidos.** Usuario y contraseña de aplicación en `.config`, fuera de
-  git; la clave de la base la genera el agente y vive en el **Llavero de macOS**. El
-  valor se pasa a `security` por entrada estándar para que no aparezca en la lista de
-  procesos.
+- **Secretos en local, sin llavero del sistema.** Usuario y contraseña de aplicación
+  de Gmail (sección `[gmail]`) y clave de la base (sección `[secmail]`) viven en
+  `~/.misyks/config`, junto a la base `~/.misyks/sec_mail.db`. Fuera del repo, para que
+  sigan funcionando cuando la app se distribuya como binario. Los gestiona la pantalla
+  de Ajustes de la app; `sec.mail` solo los lee.
 - **Registro de acciones** en tabla propia: todo lo que el agente hace sobre un correo
   queda anotado.
 
 **Pendiente**
+
+En `sec.mail`, respecto a lo descrito en §2.1:
+
+- el **resumen** que consume `sec.clasificador` y el parámetro **ventana** del contrato;
+- **descender por los reenvíos**: hoy un correo reenviado como adjunto se guarda entero
+  como `.eml`, sin extraer sus adjuntos como documentos propios;
+- la **fecha de recepción**: se guarda la cabecera `Date` (la que declara el remitente)
+  y la hora de guardado, no la fecha de llegada al buzón (`INTERNALDATE`).
 
 Los otros cinco de `secretario`: `sec.ocr`, `sec.clasificador`, `sec.agenda`,
 `sec.notificador`, `sec.entrega`. Después, grupo a grupo, según vaya funcionando cada
@@ -1025,9 +1040,11 @@ uno.
 
 **Decidido por el código**
 
-La duda entre IMAP y API de Gmail queda resuelta: **IMAP**. Sirve para cualquier
-proveedor y no ata el sistema a Google, a cambio de gestionar las credenciales, que
-es lo que resuelven el `.config` y el Llavero.
+La duda entre IMAP y API de Gmail queda resuelta: **IMAP**, a cambio de gestionar las
+credenciales, que es lo que resuelve `~/.misyks/config`. El protocolo es estándar, pero
+la implementación actual usa extensiones de Gmail (`X-GM-MSGID`, `X-GM-LABELS`) y
+`imap.gmail.com`: llevarla a otro proveedor exige sustituir esa identidad estable (por
+`Message-ID` o UID) y la lectura de etiquetas.
 
 ---
 
@@ -1043,6 +1060,6 @@ verdad un despacho generalista— pero solo 12 se revisaron con detalle de plazo
 preceptos. Alguna asignación de arquetipo es discutible: `monitorio` figura en B por
 el peso del cálculo, pero tiene tanto de H por el requerimiento previo.
 
-**Sobre los sub-agentes.** Los 54 son una propuesta de granularidad, no un contrato
+**Sobre los sub-agentes.** Los 56 son una propuesta de granularidad, no un contrato
 cerrado. El criterio aplicado: un sub-agente por tarea que pueda fallar de forma
 independiente y verificarse por separado.
