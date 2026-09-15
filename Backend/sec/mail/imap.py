@@ -16,11 +16,11 @@ class ErrorImap(RuntimeError):
 
 
 class Gmail:
-    """Uso: `with Gmail(usuario, contrasena) as gmail: ...`"""
+    """Uso: `with Gmail(usuario, password) as gmail: ...`"""
 
-    def __init__(self, usuario, contrasena):
+    def __init__(self, usuario, password):
         self.usuario = usuario
-        self.contrasena = contrasena
+        self.password = password
         self.conn = None
 
     def __enter__(self):
@@ -28,7 +28,7 @@ class Gmail:
             config.IMAP_HOST, config.IMAP_PORT, ssl_context=ssl.create_default_context(), timeout=60
         )
         try:
-            self.conn.login(self.usuario, self.contrasena)
+            self.conn.login(self.usuario, self.password)
         except imaplib.IMAP4.error:
             self.conn.shutdown()
             raise

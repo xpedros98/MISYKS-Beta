@@ -30,10 +30,10 @@ def credenciales_gmail():
     if not leidos:
         raise RuntimeError(f"No existe {CONFIG_PATH}.")
     usuario = _valor(ini, "usuario")
-    contrasena = _valor(ini, "contrasena").replace(" ", "")
-    if not usuario or not contrasena:
-        raise RuntimeError(f"Rellena 'usuario' y 'contrasena' en la sección [gmail] de {CONFIG_PATH}.")
-    return usuario, contrasena
+    password = _valor(ini, "password").replace(" ", "")
+    if not usuario or not password:
+        raise RuntimeError(f"Rellena 'usuario' y 'password' en la sección [gmail] de {CONFIG_PATH}.")
+    return usuario, password
 
 
 def _valor(ini, clave):
