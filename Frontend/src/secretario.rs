@@ -1,9 +1,19 @@
 // Lee directamente la base SQLCipher que rellena el agente Python
 // Backend/sec/mail (ver db.py) — mismo esquema, misma ruta, misma clave del
-// Llavero. Este modulo no sincroniza con Gmail ni escribe nada: solo lectura,
-// igual que `python -m sec.mail listar`.
+// archivo de config local (~/.misyks/config). Este modulo no sincroniza con
+// Gmail ni escribe correos: solo lectura, igual que `python -m sec.mail
+// listar`. sec.mail corre en local (no en el servidor) porque es quien tiene
+// la contrasena de correo — por eso ni la clave de la base ni las
+// credenciales salen nunca de este ordenador.
+use rusqlite::Connection;
+
+use crate::local_config::LocalConfig;
 
 #[derive(Debug, Clone)]
+// id y carpeta no se muestran todavia en la lista (screens/secretario.rs),
+// pero hacen falta en cuanto haya acciones (marcar leido, mover) sobre una
+// fila concreta — se quedan en la struct en vez de recalcularse luego.
+#[allow(dead_code)]
 pub struct EmailSummary {
     pub id: i64,
     pub fecha: Option<String>,
@@ -16,41 +26,35 @@ pub struct EmailSummary {
 
 #[derive(Debug, Clone)]
 pub enum SecMailError {
-    OnlyMacOs,
-    KeychainKeyMissing,
     DbNotFound(String),
     Sqlite(String),
+    Io(String),
 }
 
 impl std::fmt::Display for SecMailError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SecMailError::OnlyMacOs => {
-                write!(f, "sec.mail solo funciona en macOS (usa el Llavero del sistema).")
-            }
-            SecMailError::KeychainKeyMissing => write!(
-                f,
-                "No se encontro la clave de la base de datos en el Llavero. \
-                 Ejecuta el agente Python al menos una vez (python -m sec.mail sincronizar)."
-            ),
             SecMailError::DbNotFound(path) => write!(
                 f,
-                "No existe la base de datos en {path}. Sincroniza primero con el agente Python."
+                "No existe la base de datos en {path}. Sincroniza primero con el agente Python \
+                 (python -m sec.mail sincronizar), tras rellenar las credenciales en Ajustes."
             ),
             SecMailError::Sqlite(msg) => write!(f, "Error al leer la base de datos: {msg}"),
+            SecMailError::Io(msg) => write!(f, "Error de E/S en la configuracion local: {msg}"),
         }
     }
 }
 
-#[cfg(target_os = "macos")]
 pub fn list_emails(limit: i64) -> Result<Vec<EmailSummary>, SecMailError> {
-    use rusqlite::Connection;
-
-    let db_path = db_path();
-    if !std::path::Path::new(&db_path).exists() {
-        return Err(SecMailError::DbNotFound(db_path));
+    let db_path = LocalConfig::data_dir().join("sec_mail.db");
+    if !db_path.exists() {
+        return Err(SecMailError::DbNotFound(db_path.display().to_string()));
     }
-    let key = keychain_key()?;
+
+    let mut config = LocalConfig::load();
+    let key = config
+        .clave_db_o_generarla()
+        .map_err(|e| SecMailError::Io(e.to_string()))?;
 
     let conn = Connection::open(&db_path).map_err(|e| SecMailError::Sqlite(e.to_string()))?;
     conn.execute_batch(&format!("PRAGMA key = \"x'{key}'\""))
@@ -85,26 +89,4 @@ pub fn list_emails(limit: i64) -> Result<Vec<EmailSummary>, SecMailError> {
 
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|e| SecMailError::Sqlite(e.to_string()))
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn list_emails(_limit: i64) -> Result<Vec<EmailSummary>, SecMailError> {
-    Err(SecMailError::OnlyMacOs)
-}
-
-#[cfg(target_os = "macos")]
-fn db_path() -> String {
-    let home = std::env::var("HOME").expect("HOME no esta definido");
-    format!("{home}/Library/Application Support/MISYKS/sec_mail.db")
-}
-
-#[cfg(target_os = "macos")]
-fn keychain_key() -> Result<String, SecMailError> {
-    use security_framework::passwords::get_generic_password;
-
-    // Mismos valores que config.CUENTA_LLAVERO / config.SERVICIO_CLAVE_DB en
-    // Backend/sec/mail/config.py (cuenta="sec.mail", servicio="MISYKS sec.mail clave DB").
-    let bytes = get_generic_password("MISYKS sec.mail clave DB", "sec.mail")
-        .map_err(|_| SecMailError::KeychainKeyMissing)?;
-    String::from_utf8(bytes).map_err(|_| SecMailError::KeychainKeyMissing)
 }

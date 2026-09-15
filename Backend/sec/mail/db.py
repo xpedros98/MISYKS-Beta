@@ -1,7 +1,6 @@
 """Base de datos local cifrada con SQLCipher."""
 import os
 import re
-import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -52,14 +51,9 @@ CREATE TABLE IF NOT EXISTS acciones (
 
 
 def abrir(ruta=config.DB_PATH):
-    """Abre la base. La primera vez crea la clave y la guarda en el Llavero."""
+    """Abre la base. La clave se lee de MISYKS-Beta/.config (ver config.clave_db)."""
     ruta = Path(ruta)
-    clave = config.leer_secreto(config.SERVICIO_CLAVE_DB)
-    if clave is None:
-        if ruta.exists():
-            raise RuntimeError(f"Existe {ruta} pero su clave no está en el Llavero.")
-        clave = secrets.token_hex(32)
-        config.guardar_secreto(config.SERVICIO_CLAVE_DB, clave)
+    clave = config.clave_db()
     ruta.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     return BaseDatos(ruta, clave)
 

@@ -1,27 +1,58 @@
 """Configuración de sec.mail.
 
-Las credenciales de Gmail se escriben a mano en MISYKS-Beta/.config (ignorado
-por git). La clave de la base de datos la genera el agente y la guarda en el
-Llavero de macOS.
+sec.mail corre en local, en el ordenador del abogado (no en el servidor):
+es quien tiene la contraseña de correo y lee el contenido sin anonimizar,
+así que nunca sale de esta máquina. La app nativa (Frontend) es quien
+gestiona este archivo desde su pantalla de Ajustes (textboxes, no edición a
+mano); este módulo solo lo lee.
+
+Nada se guarda en ningún llavero del sistema operativo: la clave de la base
+de datos vive en el mismo archivo que las credenciales, no en el Keychain de
+macOS. Ambos, además de la base de datos, viven fuera del repo, en
+~/.misyks — no en una ruta relativa al propio repo, que dejaría de existir
+en cuanto la app se distribuya como binario empaquetado.
 """
 import configparser
-import subprocess
 from pathlib import Path
 
 IMAP_HOST = "imap.gmail.com"
 IMAP_PORT = 993
 
-CONFIG_PATH = Path(__file__).resolve().parents[3] / ".config"
-
-# Fuera del repo, en la carpeta del usuario.
-DATA_DIR = Path.home() / "Library" / "Application Support" / "MISYKS"
+DATA_DIR = Path.home() / ".misyks"
+CONFIG_PATH = DATA_DIR / "config"
 DB_PATH = DATA_DIR / "sec_mail.db"
-
-CUENTA_LLAVERO = "sec.mail"
-SERVICIO_CLAVE_DB = "MISYKS sec.mail clave DB"
 
 
 def credenciales_gmail():
+    ini = _leer()
+    usuario = _valor(ini, "gmail", "usuario")
+    password = _valor(ini, "gmail", "password").replace(" ", "")
+    if not usuario or not password:
+        raise RuntimeError(f"Rellena 'usuario' y 'password' en la sección [gmail] de {CONFIG_PATH}.")
+    return usuario, password
+
+
+def clave_db():
+    """Clave hexadecimal (64 caracteres) que cifra la base de datos.
+
+    No se genera ni se guarda automaticamente: se escribe a mano en
+    MISYKS-Beta/.config, seccion [secmail], clave `clave`. Para generar una
+    nueva:
+
+        python3 -c "import secrets; print(secrets.token_hex(32))"
+    """
+    ini = _leer()
+    clave = _valor(ini, "secmail", "clave")
+    if not clave:
+        raise RuntimeError(
+            f"Falta 'clave' en la sección [secmail] de {CONFIG_PATH}. "
+            "Genera una con: python3 -c \"import secrets; print(secrets.token_hex(32))\" "
+            "y pegala ahi."
+        )
+    return clave
+
+
+def _leer():
     ini = configparser.ConfigParser(interpolation=None)
     try:
         leidos = ini.read(CONFIG_PATH, encoding="utf-8")
@@ -29,36 +60,8 @@ def credenciales_gmail():
         raise RuntimeError(f"{CONFIG_PATH} está mal escrito: {e}")
     if not leidos:
         raise RuntimeError(f"No existe {CONFIG_PATH}.")
-    usuario = _valor(ini, "usuario")
-    password = _valor(ini, "password").replace(" ", "")
-    if not usuario or not password:
-        raise RuntimeError(f"Rellena 'usuario' y 'password' en la sección [gmail] de {CONFIG_PATH}.")
-    return usuario, password
+    return ini
 
 
-def _valor(ini, clave):
-    return ini.get("gmail", clave, fallback="").strip().strip("\"'")
-
-
-def leer_secreto(servicio):
-    """Devuelve el secreto guardado en el Llavero, o None si no existe."""
-    r = subprocess.run(
-        ["security", "find-generic-password", "-a", CUENTA_LLAVERO, "-s", servicio, "-w"],
-        capture_output=True,
-        text=True,
-    )
-    return r.stdout.rstrip("\n") if r.returncode == 0 else None
-
-
-def guardar_secreto(servicio, valor):
-    """Guarda (o reemplaza) un secreto en el Llavero.
-
-    El valor se pasa por la entrada estándar de `security -i` para que no
-    aparezca en la lista de procesos.
-    """
-    if not valor or any(c in valor for c in '"\\\n'):
-        raise ValueError("Valor vacío o con comillas, barras invertidas o saltos de línea.")
-    orden = f'add-generic-password -U -a {CUENTA_LLAVERO} -s "{servicio}" -w "{valor}"\n'
-    r = subprocess.run(["security", "-i"], input=orden, capture_output=True, text=True)
-    if leer_secreto(servicio) != valor:
-        raise RuntimeError(f"No se pudo guardar en el Llavero: {r.stderr.strip()}")
+def _valor(ini, seccion, clave):
+    return ini.get(seccion, clave, fallback="").strip().strip("\"'")
