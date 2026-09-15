@@ -5,3 +5,12 @@ edition = "2021"
 
 [dependencies]
 iced = "0.14"
+
+# sec.mail (Secretario) solo puede leerse en macOS: su base SQLCipher esta
+# cifrada con una clave que vive en el Llavero del sistema (ver
+# Backend/sec/mail/config.py y db.py). Dependencias condicionadas a la
+# plataforma para que el proyecto siga compilando en Linux sin arrastrar
+# SQLCipher/Security.framework alli, donde no tienen sentido.
+[target.'cfg(target_os = "macos")'.dependencies]
+rusqlite = { version = "0.40", features = ["bundled-sqlcipher"] }
+security-framework = "3.7"

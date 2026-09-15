@@ -2,10 +2,23 @@ use iced::widget::{button, column, row};
 use iced::Element;
 
 use crate::screens::{self, Screen};
+use crate::secretario::{self, EmailSummary, SecMailError};
 
-#[derive(Debug, Default)]
 pub struct State {
     current_screen: Screen,
+    secretario_emails: Result<Vec<EmailSummary>, SecMailError>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            current_screen: Screen::default(),
+            // Lectura sincrona: es un fichero SQLite local, no una llamada de
+            // red, asi que se resuelve en el arranque sin necesitar un Task
+            // async todavia.
+            secretario_emails: secretario::list_emails(50),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,10 +39,12 @@ pub fn view(state: &State) -> Element<'_, Message> {
     ]
     .spacing(10);
 
-    column![nav, screens::view(state.current_screen)]
-        .spacing(20)
-        .padding(20)
-        .into()
+    let content = match state.current_screen {
+        Screen::Home => screens::home::view(),
+        Screen::Secretario => screens::secretario::view(&state.secretario_emails),
+    };
+
+    column![nav, content].spacing(20).padding(20).into()
 }
 
 fn nav_button(target: Screen, current: Screen) -> Element<'static, Message> {
