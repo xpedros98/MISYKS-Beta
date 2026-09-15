@@ -21,6 +21,12 @@ real del código.
   consecuencias (qué se rompía antes, qué falla si se deshace), no solo el
   qué. Un `Cambió X` sin contexto no ayuda a quien lo lea dentro de tres
   meses.
+- **El ecosistema antiguo (`misyks-repo`, `~/maat/` en el servidor, y cualquier
+  cosa del "MAAT" que este proyecto viene a reemplazar) es referencia, no
+  autoridad.** Sirve para ver cómo se resolvió algo antes (un patrón, un
+  script, una decisión), pero nunca se copia ni se aplica a MISYKS-Beta sin
+  consultarlo antes con el equipo. Que algo ya exista ahí no lo convierte en
+  el diseño correcto para este proyecto.
 
 **Modelo.** Nueve grupos, no nueve agentes. Cada grupo es una familia de agentes muy
 acotados, cada uno con una sola tarea y un contrato estrecho. El grupo define el
