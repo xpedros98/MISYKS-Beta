@@ -3,12 +3,6 @@
 > Para qué sirve cada sub-agente y qué no puede hacer. Nueve grupos, 56 sub-agentes.
 > Diseño completo y contratos en `ARQUITECTURA.md` §1 y §2. Última actualización: 2026-09-16
 
-Solo `sec.mail` existe en código. Todo lo demás es diseño.
-
-La columna **restricción** recoge el límite propio del sub-agente cuando
-`ARQUITECTURA.md` §2 lo detalla (hoy: `secretario` y `procesal`). Donde aún no está
-escrito, manda la restricción del grupo.
-
 ---
 
 ## SECRETARIO · despacho — 6
