@@ -11,9 +11,10 @@ Cada entrada sigue la misma plantilla: qué hace, su contrato, las reglas de dom
 que debe respetar, cómo falla y de qué depende. Un sub-agente está bien acotado
 cuando puede fallar solo y verificarse solo.
 
-`secretario` y `procesal` están detallados. De los otros siete grupos hay todavía
-solo la tarea de cada sub-agente, no su contrato ni sus reglas: no es que no tengan
-restricciones, es que aún no están escritas.
+`secretario` y `procesal` están detallados, y de `investigador` lo está
+`inv.normativa`. Del resto hay todavía solo la tarea de cada sub-agente, no su
+contrato ni sus reglas: no es que no tengan restricciones, es que aún no están
+escritas.
 
 **Dónde corre cada uno.** Los agentes de IA —los que invocan un modelo de
 lenguaje— corren todos en el servidor `maat`, porque ahí está el modelo. Los
@@ -450,6 +451,76 @@ Toda cita que produce debe ser **comprobable**.
 | `inv.convenio` | convenio colectivo por sector y provincia |
 | `inv.doctrina` | criterio administrativo y doctrinal |
 | `inv.citas` | ¿existe la referencia y dice lo que se le atribuye? |
+
+**`inv.normativa`** — artículo y vigencia · agente de IA, en `maat` · **diseñado, sin código**
+
+Único sub-agente diseñado con **bucle de herramienta** en vez de una sola llamada:
+localizar un artículo exige a veces reintentar con otro identificador, y eso es
+iterativo por naturaleza. Los demás sub-agentes siguen siendo de una llamada; ver
+las notas del grupo.
+
+- **Contrato:** `{consulta, fecha_del_hecho}` → `{norma, articulo, vigente_en, texto, url}`
+  o `{no_encontrado, motivo}`
+- **Herramienta — la única que se le ofrece:**
+
+  ```
+  consultar_boe(norma, articulo, fecha) → {texto, url, ...} | {error}
+  ```
+
+  `norma` es el identificador BOE (`BOE-A-1889-4763`), nunca un nombre: un nombre es
+  ambiguo y un identificador es verificable. `fecha` es obligatoria — el contrato del
+  grupo exige vigencia a la fecha del hecho, así que sin fecha no hay respuesta
+  correcta posible.
+
+- **Reglas:**
+  - **El texto legal no pasa por el modelo de vuelta.** El modelo decide *qué*
+    consultar; el texto lo devuelve la herramienta y lo ensambla el código, literal.
+    Medido en `maat` con `qwen2.5:7b`: al pedirle que reprodujera el art. 1124 CC
+    convirtió «no **cumpliere**» en «no **cumpla**» dentro de una cita entrecomillada.
+    Es correcto en castellano, nadie lo nota al leer, y destruye la comprobabilidad
+    que `AGENTES.md` exige a todo el grupo. No se corrige con el prompt: un 7B que
+    regenera texto siempre puede deslizar una palabra. Se corrige no dejándole
+    regenerarlo.
+  - **La parada la decide el código, no el modelo.** Éxito = `consultar_boe` devolvió
+    texto. No se para porque el modelo diga que ha terminado: eso es una opinión suya
+    sobre su propio trabajo, y este es el agente que existe para no fiarse de eso.
+  - **Tres intentos, y detección de llamada repetida.** Si repite nombre y argumentos
+    idénticos, se corta: es el modo de fallo típico de un modelo pequeño en bucle.
+    Agotados los intentos, el resultado es `no_encontrado` — nunca una respuesta
+    redactada de memoria.
+  - **El error de la herramienta enseña.** `ERROR: norma "CC" no reconocida. Formato
+    BOE-A-AAAA-NNNN. Código Civil = BOE-A-1889-4763` permitió la corrección en la
+    iteración siguiente; un `400 Bad Request` no habría enseñado nada. La calidad del
+    mensaje de error es la mitad del resultado, no un detalle de implementación.
+  - **Prefijo estable.** System prompt y esquema de la herramienta, fijos y primero;
+    lo variable, al final. La caché de prefijo de Ollama bajó el procesado de 21,8 s a
+    0,13 s en la misma petición repetida. Meter la fecha de hoy en el system prompt
+    cuesta ~20 s por iteración.
+  - **Devuelve siempre `url`.** Es lo que hace la cita comprobable de verdad: el
+    letrado pincha y ve el original.
+
+- **Falla si:** deja que el modelo reproduzca el texto legal; deriva la parada del
+  modelo en vez de del resultado de la herramienta; devuelve una cita sin `url`;
+  responde sin fecha de vigencia; o acepta un nombre de norma en vez de un
+  identificador BOE.
+
+- **Medido** (`maat`, `qwen2.5:7b`, 12 núcleos, sin GPU, 2026-09-16): emite
+  `tool_calls` bien formados y normaliza fechas por su cuenta; se corrige ante un
+  error explicativo; para al recibir datos. Generación ~7,4 tok/s. Bucle de tres
+  vueltas, 92 s; con la salida directa desde la herramienta, ~41 s. Contra un
+  `consultar_boe` simulado y un solo artículo: **la fuente real del BOE y los casos
+  de artículo modificado siguen sin medir.**
+
+### Notas de diseño del grupo
+
+- **`inv.normativa` es la excepción, no el patrón.** Lleva bucle porque localizar un
+  artículo puede exigir reintentar; los otros cuatro sub-agentes del grupo son de una
+  llamada y no deben ganar herramientas «por coherencia». Un bucle añade modos de
+  fallo, y solo se paga donde la tarea es genuinamente iterativa.
+- **La superficie de herramientas es cerrada y de lectura.** Al modelo se le ofrece
+  exactamente una función, definida por nosotros, contra una fuente pública. No tiene
+  disco, ni shell, ni forma de pedir nada que no esté en ese array. Es lo que hace
+  admisible un bucle dentro de un sistema que debe poder auditarse.
 
 ## PROBATORIO · prueba — 5
 
