@@ -3,6 +3,9 @@
 El día a día, en un Mac. Si es la primera vez que os ponéis en este repo, pasad antes
 por `INSTALACION.md`: se hace una vez y deja todo listo.
 
+El *git* lo actualizais vostors mediante claude, nada de comandos automáticos para eso.
+Si aparece algun conflicto contactar con Dr. Pedrosa.
+
 ---
 
 ## 1 · Ubicarse en la carpeta del repo
