@@ -23,6 +23,8 @@ configuración a medias.
 import configparser
 import os
 import stat
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -171,9 +173,14 @@ def _escribir_seccion(seccion, valores, quitar_vacios=False):
     El archivo se escribe entero a un temporal en el mismo directorio y se
     reemplaza de golpe: `os.replace` es atómico, así que una interrupción deja
     el archivo anterior intacto en vez de uno truncado sin la clave de la base
-    de datos, que dejaría la base ilegible. Los permisos se recortan a 0600
-    antes de que haya nada dentro (en Windows no aplica: allí los permisos
-    efectivos los pone el Frontend con ACL, ver local_config.rs).
+    de datos, que dejaría la base ilegible.
+
+    Y después hay que volver a cerrar los permisos, que es lo que no es obvio:
+    el archivo que queda es el temporal, con los permisos que heredó del
+    directorio, no los del archivo al que sustituye. Sin `_restringir_permisos`
+    cada renovación de token deshacía en silencio el endurecimiento que hace el
+    Frontend (`local_config.rs`), dejando el refresh token y la clave de la
+    base legibles para `SYSTEM` y `Administrators`.
     """
     ini = _leer(obligatorio=False)
     if not ini.has_section(seccion):
@@ -187,7 +194,6 @@ def _escribir_seccion(seccion, valores, quitar_vacios=False):
     CONFIG_PATH.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     descriptor, temporal = tempfile.mkstemp(dir=str(CONFIG_PATH.parent), prefix=".config-")
     try:
-        os.chmod(temporal, stat.S_IRUSR | stat.S_IWUSR)
         with os.fdopen(descriptor, "w", encoding="utf-8") as f:
             ini.write(f)
             f.flush()
@@ -196,3 +202,44 @@ def _escribir_seccion(seccion, valores, quitar_vacios=False):
     except BaseException:
         os.unlink(temporal)
         raise
+    _restringir_permisos(CONFIG_PATH)
+
+
+def _restringir_permisos(ruta):
+    """Deja el archivo accesible solo a quien lo usa. Equivale a `0600`.
+
+    En Windows no basta con `chmod`, que el sistema ignora casi por completo:
+    hace falta reescribir la ACL. Se usa `icacls` por lo mismo que el Frontend
+    (`local_config.rs`) -- `/inheritance:r` borra los permisos heredados y
+    `/grant:r` deja solo el de la cuenta actual --, y se mantienen los dos
+    lados equivalentes a propósito: quien escriba el archivo, lo cierra.
+
+    Si falla no se aborta la operación: el token ya está guardado y perderlo
+    por no haber podido ajustar una ACL sería peor. Pero se avisa, porque un
+    archivo de secretos con permisos abiertos no debe pasar desapercibido.
+    """
+    if os.name != "nt":
+        os.chmod(ruta, stat.S_IRUSR | stat.S_IWUSR)
+        return
+
+    usuario = os.environ.get("USERNAME", "")
+    if not usuario:
+        return
+    dominio = os.environ.get("USERDOMAIN", "")
+    cuenta = f"{dominio}\\{usuario}" if dominio else usuario
+    try:
+        resultado = subprocess.run(
+            ["icacls", str(ruta), "/inheritance:r", "/grant:r", f"{cuenta}:(F)", "/q"],
+            capture_output=True,
+            text=True,
+            # Sin ventana de consola: la app es de ventana, no de terminal.
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError as e:
+        print(f"Aviso: no se pudieron restringir los permisos de {ruta}: {e}", file=sys.stderr)
+        return
+    if resultado.returncode != 0:
+        print(
+            f"Aviso: icacls no pudo restringir los permisos de {ruta}: {resultado.stderr.strip()}",
+            file=sys.stderr,
+        )

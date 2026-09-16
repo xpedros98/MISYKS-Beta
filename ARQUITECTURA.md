@@ -77,7 +77,7 @@ los agentes son agentes de IA**.
 
 | tipo | qué es | dónde corre | por qué |
 |---|---|---|---|
-| **Agente de software** | código determinista, sin LLM | donde están sus datos y sus credenciales | `sec.mail` necesita la contraseña del correo y lee contenido sin anonimizar: corre en el PC del letrado y eso no sale de ahí |
+| **Agente de software** | código determinista, sin LLM | donde están sus datos y sus credenciales | `sec.mail` tiene los tokens de acceso al buzón y lee contenido sin anonimizar: corre en el PC del letrado y eso no sale de ahí |
 | **Agente de IA** | invoca un modelo de lenguaje | **siempre en el servidor (`maat`)** | ahí está el modelo. Ollama con `qwen2.5:7b`, 12 núcleos y 62 GB de RAM; el portátil del letrado no sostiene eso, y replicarlo en cada equipo no tiene sentido |
 
 Los nueve grupos de arriba describen **qué decide** cada agente, no dónde se ejecuta.
@@ -859,6 +859,13 @@ Decisiones que conviene no perder:
   `[oauth.google]`) y la clave de la base (`[secmail]`) viven en `~/.misyks/config`,
   junto a la base `~/.misyks/sec_mail.db`. Fuera del repo, para que sigan funcionando
   cuando la app se distribuya como binario.
+- **Escribir el archivo de secretos vuelve a abrirlo.** El reemplazo atómico deja en
+  su sitio el archivo temporal, que heredó los permisos del directorio y no los del
+  archivo al que sustituye. Cada renovación de token deshacía así, en silencio, el
+  endurecimiento que aplica el Frontend, dejando el refresh token y la clave de la
+  base legibles para `SYSTEM` y `Administrators` (comprobado con `icacls`). Quien
+  escribe el archivo lo cierra: `config._restringir_permisos` repite en Python lo que
+  `local_config.rs` hace en Rust.
 - **`config.py` ya escribe, no solo lee.** Con contraseña de aplicación bastaba con
   leer, porque la escribía la persona desde Ajustes. Con OAuth el access token caduca
   cada hora y Microsoft rota el refresh token en cada renovación: quien renueva tiene
@@ -902,6 +909,11 @@ Del paso a OAuth:
 - **Registro y verificación de las apps.** Hoy cada máquina usa su propio `client_id`
   en estado *Testing*, donde Google caduca el refresh token a los siete días. La app
   publicada y verificada es trámite aparte (§8.6).
+- **Determinación del mundo por MX.** No está implementada: hoy el proveedor sale de
+  `[correo] proveedor` en la configuración, o se deduce cuando hay una sola cuenta
+  conectada. Basta mientras la conexión la hace una persona en Ajustes, eligiendo
+  Google o Microsoft; hará falta cuando se quiera acertar solo a partir de la
+  dirección.
 - **Una cuenta por proveedor.** El esquema ya guarda `cuenta` en cada correo, pero
   `config` elige un único proveedor activo: varias cuentas a la vez no están
   resueltas.
