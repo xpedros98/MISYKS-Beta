@@ -97,17 +97,32 @@ torcida y con reflejo.
   agendas entre letrados del despacho.
 
 **`sec.notificador`** — avisos y log
+El letrado no verifica las fechas de plazo (ver `pro.calendario`, en PROCESAL), así
+que el riesgo se desplaza: ya no es tanto calcular mal como que un aviso pase
+desapercibido. Este sub-agente es la mitad de la garantía; la otra mitad es la
+validación del motor de días.
 
-- **Contrato:** `{evento, prioridad}` → `{notificacion, log_entry}`
+- **Contrato:** `{evento, prioridad}` → `{notificacion, log_entry, visto}`
 - **Reglas:**
   - **Todo lo que notifica queda en el log.** Ese log es la prueba de qué se advirtió
     y cuándo: si un plazo se pierde, es lo que distingue un fallo del sistema de un
     aviso desatendido.
-  - La insistencia escala con la franja que le pasa `pro.caducidad`. Un aviso en
+  - **Un aviso de plazo basta para actuar sin abrir nada más:** asunto, qué hay que
+    hacer, órgano, último día, días que quedan y una **fecha recomendada** anterior al
+    vencimiento, con el margen de seguridad de `pro.caducidad`. Si el plazo es
+    `provisional`, lo dice.
+  - La insistencia escala con la franja que le pasa `pro.caducidad`: aviso al entrar y
+    recordatorios cada vez más seguidos según se acerca el vencimiento. Un aviso en
     franja crítica no puede pesar lo mismo que uno en franja holgada.
+  - **Cambios de fecha:** si un plazo se **adelanta**, aviso inmediato con la fecha
+    anterior y la nueva; si se **retrasa**, se actualiza sin interrumpir y queda en el
+    log. Enterarse tarde de un adelanto puede costar el plazo; de un retraso, no.
+  - **Comprueba que el aviso se ha visto.** Si un aviso importante no se abre, insiste
+    y lo manda también por otra vía.
   - El log es enumerable y consultable, no un flujo efímero de notificaciones.
 - **Falla si:** notifica sin registrar — y entonces no hay constancia de la
-  advertencia; o trata todos los avisos igual, y el letrado deja de leerlos.
+  advertencia; trata todos los avisos igual, y el letrado deja de leerlos; o da por
+  avisado al letrado sin comprobar que ha visto un aviso crítico.
 
 **`sec.entrega`** — emisor
 Misma conexión de correo, dirección contraria. Dos usos: mandar a firmar y compartir
@@ -167,21 +182,98 @@ falta es una tabla mejor.
 **`pro.calendario`** — el motor de días
 Dependencia de todos los demás: ningún plazo se calcula sin pasar por él.
 
-- **Contrato:** `{fecha_inicio, dias, tipo_dia, orden, municipio_organo}` → `{fecha_limite, dias_restantes, festivos_aplicados[]}`
+**El letrado no verifica las fechas que produce**: recibe el aviso y actúa. Es una
+decisión de diseño, no un descuido: se diseña pensando en un despacho de un solo
+abogado, y el sistema tiene que quitarle trabajo, no dárselo. La consecuencia es que
+nadie más en la cadena va a detectar un error, así que la garantía se reparte en dos:
+la **corrección**, antes de usarlo con clientes (validación, abajo), y la
+**visibilidad**, después (`sec.notificador`).
+
+- **Contrato:** `{fecha_inicio, plazo, unidad, tipo_dia, sentido, tipo_computo, orden, municipio_organo, municipio_interesado?, ahora}` → `{fecha_limite, dias_restantes, estado, festivos_aplicados[], reglas_aplicadas[], version_calendario, avisos[]}`
+  - `estado`: `firme · provisional`.
+  - `sentido`: hacia delante, o hacia atrás («X días antes de la vista»). Lo necesita
+    la regla de la fecha prudente, porque un festivo que falta tiene efectos opuestos
+    en cada caso.
+- **Calculadora y calendario van separados.** El motor conoce las reglas pero no
+  guarda festivos: los recibe de un calendario mantenido aparte. Los festivos cambian
+  cada año, en cada municipio y a veces a mitad de año; si vivieran dentro del motor,
+  cada corrección de un boletín obligaría a tocar el código que decide plazos.
 - **Reglas:**
   - Sábados y domingos son inhábiles a efectos procesales.
   - El *dies a quo* es el día **siguiente** a la notificación, no el de la notificación.
   - Agosto es inhábil para actuaciones judiciales con excepciones tasadas; en el orden
     social varias modalidades urgentes siguen corriendo (despido, tutela de derechos
     fundamentales, conflicto colectivo).
+  - Del **24 de diciembre al 6 de enero**, ambos inclusive, también es inhábil para
+    actuaciones judiciales salvo las urgentes (art. 183 LOPJ, desde la LO 14/2022).
   - **El cómputo administrativo no es el judicial**: los plazos por meses van de fecha
     a fecha y el calendario de festivos aplicable es distinto.
-  - Festivos = nacionales + autonómicos + **locales del municipio del órgano**, no del
-    municipio del despacho.
+  - En los plazos por meses, si el mes de vencimiento no tiene día equivalente, el
+    plazo vence el último día del mes (art. 133.3 LEC, art. 30.4 Ley 39/2015). Si el
+    último día es inhábil, se prorroga al siguiente hábil.
+  - **Judicial:** festivos nacionales + autonómicos + **locales del municipio del
+    órgano** (art. 182 LOPJ), no del municipio del despacho.
+  - **Administrativo:** un día es inhábil si lo es en la sede del órgano **o** en el
+    municipio donde reside el interesado (art. 30.6 Ley 39/2015). Mirar solo el del
+    órgano da por hábil un día que la ley declara inhábil.
+  - **Cada regla lleva su fecha de entrada en vigor.** Las normas procesales se
+    reforman: un plazo de 2021 no conoce la inhabilidad de Navidad. Sin vigencia,
+    recalcular un caso antiguo —o validar con sentencias de otros años— da resultados
+    falsos.
+- **Fecha prudente.** Cuando falta un dato, da la fecha que obliga a actuar **antes**,
+  nunca después, y marca el resultado `provisional`. Lo peor que puede pasar es
+  presentar un día antes de lo necesario.
+  - Casos: festivos del año siguiente aún sin publicar (los locales salen entre agosto
+    y diciembre, y un plazo que empieza en noviembre y vence en enero ya los necesita);
+    varias fechas de inicio candidatas porque la notificación es dudosa (calcula con la
+    más temprana).
+  - Hacia delante, un festivo que falta hace vencer el plazo antes: basta con calcular
+    sin él. Hacia atrás el efecto es el contrario: se supone que los locales que faltan
+    —como mucho dos por municipio— caen dentro del plazo.
+  - Cuando llega el dato, recalcula solo. Si la fecha se adelanta, `sec.notificador`
+    avisa en el acto; si se retrasa, se actualiza sin interrumpir.
+- **Cada fecha tiene su explicación.** El resultado guarda qué reglas y qué festivos se
+  aplicaron y con qué versión del calendario. El letrado no tiene por qué leerla, pero
+  si alguien pregunta «¿por qué esta fecha?» hay respuesta, y el cálculo se puede
+  repetir aunque el calendario se haya corregido después.
+- **Es un agente de software**, sin LLM: corre donde estén los datos de los
+  expedientes, según la regla de `ARQUITECTURA.md` §1, «Dónde corre cada agente». El
+  calendario, en cambio, es dato público y puede vivir en el servidor sin reservas.
+- **Validación antes de usarlo con clientes.** Como nadie revisa después, no entra en
+  uso hasta superar las tres comprobaciones. No hacen falta casos reales de un
+  abogado, que hoy no existen:
+  - **Sentencias** que resolvieron si algo se presentó a tiempo: recogen la fecha de
+    notificación, los días excluidos y el último día, y el motor tiene que llegar a la
+    misma fecha. Se eligen a mano en el CENDOJ, que no permite descargas masivas ni uso
+    comercial de su base: de cada una se guarda el ECLI y las fechas, nunca el texto.
+  - **Ejemplos sacados de la ley**, varios por regla, cada uno citando su artículo y
+    cubriendo los casos límite: notificación en viernes, plazo que cruza agosto o
+    Navidad, último día festivo, 31 de enero más un mes.
+  - **Pruebas de sentido común repetidas miles de veces** con datos aleatorios: añadir
+    un festivo nunca adelanta un plazo hacia delante; en N días hábiles hay exactamente
+    N días hábiles; intercambiar los dos municipios del art. 30.6 no cambia el
+    resultado.
 - **Falla si:** usa el calendario del despacho; trata agosto como uniforme; mezcla
-  cómputo civil y administrativo.
-- **Necesita:** calendario oficial por municipio, actualizado cada año. Dato externo
-  con caducidad anual: si no se refresca, el sistema calcula mal **en silencio**.
+  cómputo civil y administrativo; ignora el municipio del interesado en lo
+  administrativo; da una fecha posterior a la real cuando le falta un dato; da una
+  fecha que no sabe explicar; se usa con clientes sin haber superado la validación.
+- **Necesita:**
+  - Calendario oficial de festivos por municipio, **fiable y al día**. Se da por
+    resuelto: mantenerlo no es tarea de este sub-agente (ver nota siguiente).
+  - `municipio_organo`, de `pro.destino`; en cómputo administrativo, además, el
+    municipio de residencia del interesado, de la ficha del cliente.
+
+*Origen del calendario.* No existe una fuente única de festivos por municipio. Se forma
+en tres capas: las **nacionales**, las **autonómicas**, que fija cada comunidad, y hasta
+dos **locales** por municipio, que propone el pleno del ayuntamiento y aprueba y
+publica la autoridad laboral de la comunidad. El BOE publica cada año (hacia octubre)
+las nacionales y autonómicas, pero **no las locales**. Casi todas las comunidades
+publican las locales en su boletín, con dos excepciones: Castilla y León, en los nueve
+boletines provinciales, y el País Vasco, en los boletines de Álava, Bizkaia y Gipuzkoa.
+Canarias añade fiestas insulares. En total, unas 29 publicaciones distintas solo para
+las locales, que a menudo se corrigen con el año ya empezado (en 2026, Andalucía en
+febrero y abril; Aragón, en marzo). Por eso no basta con refrescar el calendario una
+vez al año: si no se vigila, el sistema calcula mal **en silencio**.
 
 **`pro.caducidad`** — plazos perentorios
 El que puede matar un caso.
@@ -255,10 +347,15 @@ Segundo paso del grupo, justo antes de que el secretario envíe. Existe porque
   rechazado por un defecto de forma que el crítico no mira.
 
 **`pro.destino`** — a dónde va
-- **Contrato:** `{tipo_documento, organo, expediente}` → `{canal, destinatario}`
+- **Contrato:** `{tipo_documento, organo, expediente}` → `{canal, destinatario, municipio_sede}`
 - **Reglas:**
   - Resuelve el canal que usará el secretario: `lexnet-out · registro · burofax ·
     notaria · entrega`.
+  - **Resuelve también el municipio de la sede del órgano**, a partir de una tabla de
+    órganos y sedes. `pro.calendario` lo necesita para aplicar los festivos locales, y
+    este es el sub-agente que ya conoce el órgano; sin esta resolución el calendario
+    tendría que adivinarlo o caería en el municipio del despacho. Esta consulta se usa
+    **ya en la puerta**, no solo en la salida: el primer cálculo del plazo la necesita.
   - Es el punto de traspaso limpio entre los dos grupos: **procesal decide dónde,
     secretario entrega**.
   - 30 de los 89 tipos no salen por LexNET. Sin este sub-agente, el destino se
@@ -292,8 +389,9 @@ El más complejo del bloque: no es un sistema, son decenas.
     guardar las dos.
   - Cabe presentar en un registro que no sea el competente: sigue deteniendo el plazo
     aunque el expediente tarde días en llegar a destino.
-  - Calendario **administrativo**: los plazos por meses van de fecha a fecha, y el
-    festivo aplicable es el de la Administración destinataria.
+  - Calendario **administrativo**: los plazos por meses van de fecha a fecha, y un día
+    es inhábil si lo es en la sede de la Administración destinataria **o** en el
+    municipio donde reside el interesado (art. 30.6 Ley 39/2015).
   - El registro electrónico está abierto 24/7; lo presentado en día inhábil se
     entiende hecho a primera hora del siguiente hábil, pero la fecha de presentación
     queda registrada.

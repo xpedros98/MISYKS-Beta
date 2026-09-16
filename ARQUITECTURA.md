@@ -1,7 +1,7 @@
 # Arquitectura de agentes y tipos documentales
 
 > Modelo de organización del enrutado de MISYKS.
-> Última actualización: 2026-09-15
+> Última actualización: 2026-09-16
 
 **Naturaleza del documento.** Diseño completo del sistema de agentes. No se
 distingue entre lo implementado y lo pendiente salvo en §8.3, que recoge el estado
@@ -231,7 +231,7 @@ envuelve al trabajo:
 └─────────────────────────────────────────────┘
 ```
 
-Tres consecuencias:
+Cuatro consecuencias:
 
 **El secretario está en las 89 rutas**, y en las dos puntas. Todo entra y sale por
 él, incluso cuando el impulso es del letrado: entonces la entrada es el registro del
@@ -246,6 +246,15 @@ plazo.
 sabe recibir y entregar, no sabe de plazos. El procesal calcula y determina destino,
 pero no tiene acceso a ningún canal. La separación es lo que hace auditables a los
 dos.
+
+**El letrado no verifica los plazos: los recibe.** Se diseña pensando en un despacho
+de un solo abogado, al que el sistema tiene que quitar trabajo, no dárselo. Como nadie
+revisa después las fechas que calcula `procesal`, la garantía se reparte entre las dos
+capas del envoltorio. `procesal` responde de la **corrección**: `pro.calendario` no se
+usa con clientes hasta superar su validación, y cuando le falta un dato da la fecha que
+obliga a actuar antes. `secretario` responde de la **visibilidad**: `sec.notificador`
+comprueba que los avisos se ven e insiste si no. Si falla cualquiera de las dos mitades,
+el plazo se pierde sin que nadie lo detecte. Detalle de ambos en `AGENTES.md`.
 
 ---
 
