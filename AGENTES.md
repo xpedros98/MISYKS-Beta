@@ -5,6 +5,8 @@
 > La arquitectura del sistema —cómo se componen los grupos, las rutas, los
 > arquetipos— está en `ARQUITECTURA.md`. Última actualización: 2026-09-16
 
+**Estado.** Implementado: `sec.mail`. Los otros 55 son diseño, sin código.
+
 Cada entrada sigue la misma plantilla: qué hace, su contrato, las reglas de dominio
 que debe respetar, cómo falla y de qué depende. Un sub-agente está bien acotado
 cuando puede fallar solo y verificarse solo.
@@ -13,6 +15,12 @@ cuando puede fallar solo y verificarse solo.
 solo la tarea de cada sub-agente, no su contrato ni sus reglas: no es que no tengan
 restricciones, es que aún no están escritas.
 
+**Dónde corre cada uno.** Los agentes de IA —los que invocan un modelo de
+lenguaje— corren todos en el servidor `maat`, porque ahí está el modelo. Los
+agentes de software, deterministas y sin LLM, corren donde están sus datos y sus
+credenciales: `sec.mail` en el PC del letrado. Ver `ARQUITECTURA.md` §1, «Dónde
+corre cada agente».
+
 ---
 
 ## SECRETARIO · despacho — 6
@@ -20,7 +28,7 @@ restricciones, es que aún no están escritas.
 La capa del despacho. Sabe recibir, clasificar, recordar y enviar; no sabe de plazos
 ni de derecho, y no toca ningún canal procesal.
 
-**`sec.mail`** — receptor · **implementado** (lo que aún falta, en §8.3)
+**`sec.mail`** — receptor · agente de software, en local · **implementado** (lo que aún falta, en §8.3)
 Gmail sobre IMAP, base local cifrada con SQLCipher. Corre en el ordenador del
 letrado, no en el servidor: tiene la contraseña del correo y lee el contenido sin
 anonimizar, así que ese contenido no sale de su máquina.

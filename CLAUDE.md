@@ -1,3 +1,9 @@
+# MISYKS-Beta
+
+Sistema de agentes para un despacho de abogados: recibe documentos, controla plazos,
+investiga, redacta y revisa. Backend en Python, frontend nativo en Rust con `iced`.
+Nueve grupos de agentes, 56 sub-agentes diseñados, uno implementado (`sec.mail`).
+
 ## Normas de trabajo
 
 - **Nada de branches.** Se trabaja directo sobre `main`.
@@ -10,13 +16,13 @@
 
 ## Idioma
 
-El proyecto se desarrolla en un contexto de España: código, comentarios, commits y
-documentación en castellano, identificadores incluidos (`sincronizar`,
-`guardar_correo`). Los tecnicismos pueden tratarse en inglés por conveniencia.
+El proyecto se desarrolla en un contexto de España, pero los tecnicismos pueden tratarse en inglés por conveniencia.
 
 ## Órdenes
 
-Backend (desde `Backend/`, con el venv creado en `Backend/.venv`):
+Backend (desde `Backend/`, con el venv en `Backend/.venv`). El venv no está en el
+repo y puede no existir todavía en la máquina; compruébalo antes de dar por hecho
+que estas órdenes arrancan (crearlo: `INSTALACION.md`):
 
 ```bash
 python -m sec.mail carpetas                     # Lista carpetas de Gmail
@@ -32,10 +38,28 @@ No hay suite de tests ni linter configurados todavía; no inventes órdenes de t
 
 ## Arquitectura
 
-Detallada en ARQUITECTURA.md, consultar en profundidad bajo demanda.
+Detallada en ARQUITECTURA.md.
 
 ## Agentes
 
 AGENTES.md lista los agentes: solo incluye información de para qué sirve cada uno y
 sus restricciones. Esas restricciones son invariantes, no estilo: al romperlas, el
 código sigue compilando y aparentemente funcionando.
+
+Los agentes de IA (los que invocan un LLM) corren todos en el servidor `maat`. Los
+agentes de software corren donde están sus datos y credenciales: `sec.mail`, en el
+PC del letrado.
+
+## Historial
+
+Existe una especie de diario que simplifica las acciones por días: DIARIO.md; sigue una estructura fija de: día, resumen, cambios.
+
+## Manual e instalación
+
+Dos documentos escritos para las personas del equipo, no para ti, y pensados para
+macOS, que es donde trabaja el equipo:
+
+- `INSTALACION.md` — dependencias y primera puesta en marcha (Homebrew, Python,
+  Rust, Claude Code, clonar el repo, crear el venv del Backend). Es donde está el
+  `python3 -m venv .venv` que las órdenes de arriba dan por hecho.
+- `MANUAL.md` — el día a día: ubicarse en el repo, arrancar y qué leer primero.

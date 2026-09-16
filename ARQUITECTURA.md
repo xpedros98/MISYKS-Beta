@@ -70,6 +70,25 @@ candidatos, no una respuesta**.
 
 ---
 
+### Dónde corre cada agente
+
+Eje de diseño distinto del anterior, y el que decide la infraestructura: **no todos
+los agentes son agentes de IA**.
+
+| tipo | qué es | dónde corre | por qué |
+|---|---|---|---|
+| **Agente de software** | código determinista, sin LLM | donde están sus datos y sus credenciales | `sec.mail` necesita la contraseña del correo y lee contenido sin anonimizar: corre en el PC del letrado y eso no sale de ahí |
+| **Agente de IA** | invoca un modelo de lenguaje | **siempre en el servidor (`maat`)** | ahí está el modelo. Ollama con `qwen2.5:7b`, 12 núcleos y 62 GB de RAM; el portátil del letrado no sostiene eso, y replicarlo en cada equipo no tiene sentido |
+
+Los nueve grupos de arriba describen **qué decide** cada agente, no dónde se ejecuta.
+La mayoría de los 56 sub-agentes son de IA y, por tanto, viven en `maat`; los que
+tocan un canal con credenciales (`sec.mail`, y más adelante `sec.entrega`) son de
+software y corren en local.
+
+Un sub-agente puede ser de software y aun así necesitar un paso de IA: `sec.mail`
+descarga y almacena en local, pero el **resumen** que consume `sec.clasificador` se
+genera en `maat` (§8.4). La frontera no es el sub-agente, es la llamada al modelo.
+
 ### SECRETARIO · despacho
 El canal con **el mundo del despacho**: correo, agenda y avisos. No conoce los
 canales procesales —LexNET, registro, notaría— que pertenecen a `procesal`. Su
@@ -128,11 +147,26 @@ Regla dura: **nunca deja un placeholder vacío**. Si falta un dato, se pide.
 
 ---
 
-### Middleware transversal
+### Middleware transversal — `anonimizar`, pendiente
 
-`anonimizar` no es un grupo: es un filtro que atraviesa a todos. Seudonimiza antes
-de que nada salga hacia un modelo externo y reinserta los datos reales en local al
-redactar. Obligatorio en penal, familia y todo lo que toque salud.
+`anonimizar` no es un grupo: sería un filtro transversal que seudonimiza antes de
+cualquier llamada a un modelo y reinserta los datos reales en local al redactar.
+**No existe: no está implementado ni diseñado en detalle.** Donde las rutas de §6
+escriben `[anonimizar]`, hay un hueco, no un paso que ocurra.
+
+Tres observaciones para cuando se aborde:
+
+- **El alcance está sin decidir.** Se planteó como obligatorio en penal, familia y lo
+  que toque salud. Eso deja fuera el correo ordinario, que es el volumen real. Si el
+  criterio acaba siendo «antes de cualquier llamada al modelo», entonces es universal
+  y no por materia — y son dos sistemas distintos, no el mismo con más casos.
+- **No sostiene el argumento RGPD de §8.4.** `maat` está en la UE, así que enviarle
+  datos no es transferencia internacional con o sin seudonimización. Anonimizar
+  reduciría el impacto de un acceso indebido al servidor; no cambia la base legal.
+  Conviene no apoyarse en él para justificar la infraestructura.
+- **Reinsertar es la mitad difícil.** Seudonimizar es sustituir; devolver los datos
+  reales al redactar exige un mapa fiable por documento, y un fallo ahí no se ve:
+  produce un escrito coherente con el nombre equivocado.
 
 ### La capa de autoridad
 
@@ -615,8 +649,9 @@ sec.agenda           avisos de vencimiento, prórroga y actualización anual
 **Implementado — `sec.mail`**
 
 Primer sub-agente implementado. Gmail sobre IMAP con almacenamiento local cifrado.
-Corre en el ordenador del letrado; solo lo ya anonimizado sube a los agentes del
-servidor.
+Corre en el ordenador del letrado. **Hoy no sube nada al servidor**: el resumen que
+lo haría sigue pendiente (más abajo). Cuando exista, subirá sin filtrar —
+`anonimizar` no está implementado (§1).
 
 | pieza | fichero |
 |---|---|
