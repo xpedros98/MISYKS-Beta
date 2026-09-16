@@ -1,5 +1,6 @@
 mod app;
 mod local_config;
+mod proceso;
 mod screens;
 mod secretario;
 

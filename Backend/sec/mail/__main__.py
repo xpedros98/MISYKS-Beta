@@ -6,7 +6,8 @@
     python -m sec.mail leido ID               marca un correo como leído en Gmail
     python -m sec.mail mover ID CARPETA       mueve un correo a otra carpeta de Gmail
 
-Las credenciales de Gmail se escriben a mano en MISYKS-Beta/.config.
+Las credenciales de Gmail viven en ~/.misyks/config, seccion [gmail]. Normalmente
+las escribe la pantalla de Ajustes de la app (Frontend), no se editan a mano.
 """
 import argparse
 import imaplib

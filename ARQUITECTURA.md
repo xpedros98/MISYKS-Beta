@@ -1141,6 +1141,91 @@ frio. Mismo mecanismo que ya usa el ecosistema antiguo (`~/maat/scripts/`, para
 la automatizacion ajena (esa, de hecho, esta rota -- `gemma3:12b` ya no esta descargado
 en el servidor, asi que ese cron lleva tiempo fallando en silencio).
 
+
+### 8.5 · Portabilidad del Frontend a Windows
+
+El `Frontend` se escribio y probo en macOS/Linux, y tenia tres dependencias de
+Unix escondidas. La primera no era un fallo en ejecucion: **el binario no
+compilaba en Windows**.
+
+- **Aleatorios de la clave de la base.** `generar_clave_hex` leia `/dev/urandom`
+  a mano en una funcion marcada `#[cfg(unix)]`, sin variante para el resto, asi
+  que en Windows quedaba una llamada sin destino. Ahora usa la crate `getrandom`,
+  que hace la llamada nativa de cada plataforma (`getrandom(2)`, `BCryptGenRandom`).
+  Se mantiene la intencion del codigo anterior -- no arrastrar una crate de
+  criptografia entera solo para 32 bytes -- porque `getrandom` es el envoltorio
+  del RNG del SO, no una implementacion criptografica. No anade nada nuevo al
+  arbol: la version ya estaba en `Cargo.lock` como dependencia transitiva de `iced`.
+- **Resolucion de `~/.misyks`.** `LocalConfig::data_dir` hacia
+  `env::var("HOME").expect(...)`. El panico en Windows era lo de menos; el modo de
+  fallo grave es el silencioso: **si el Rust y el Python resuelven el home a
+  directorios distintos, sec.mail sincroniza contra una base y la app abre otra,
+  vacia, sin ningun error a la vista.** Los dos lados tienen que coincidir por
+  contrato, asi que `home_dir()` replica el orden de `os.path.expanduser("~")` de
+  CPython (`USERPROFILE`, luego `HOMEDRIVE`+`HOMEPATH`; `HOME` fuera de Windows),
+  que es lo que hay detras del `Path.home()` de `config.py`. Cuidado con git-bash:
+  ahi `HOME` si esta definido, y puede no ser el mismo directorio.
+- **Ruta del interprete del venv.** `.venv/bin/python3` es POSIX; los venv de
+  Windows ponen el ejecutable en `.venv/Scripts/python.exe`. Con la ruta fija, el
+  boton Refrescar no lanzaba nada en Windows. Resuelto en `ruta_interprete()`.
+
+**Permisos del archivo de secretos.** `restringir_permisos` aplicaba `0o600` en
+Unix y **nada en Windows**, donde `~/.misyks/config` heredaba la ACL del perfil.
+Comprobado en una maquina real: `NT AUTHORITY\SYSTEM`, `BUILTIN\Administrators`
+y el propio usuario, los tres con `FullControl`. Ese archivo tiene la contrasena
+de aplicacion de Gmail y la clave de `sec_mail.db`, asi que contradecia la premisa
+de que los secretos no salen de la maquina del letrado.
+
+Resuelto con `icacls`: `/inheritance:r` borra los ACE heredados y `/grant:r` deja
+un unico ACE, el de la cuenta actual (`USERDOMAIN\USERNAME`, o `USERNAME` a secas
+si no hay dominio). Se descarto la API Win32 (`SetNamedSecurityInfo`) para no
+arrastrar `windows-sys` y varios bloques `unsafe` por un solo ajuste.
+
+Con ello cambio tambien **el orden de escritura de `save()`**, que es la parte que
+importa de verdad: antes escribia el archivo y recortaba permisos despues, lo que
+deja una ventana con el secreto en disco accesible a quien herede la ACL -- y si
+el recorte fallaba, el secreto quedaba escrito mientras la UI decia "no se pudo
+guardar", un mensaje falso. Ahora se crea un temporal vacio, se le recortan los
+permisos, se escribe y se renombra encima. Verificado que la ACL recortada
+sobrevive al rename, que es lo que sostiene el planteamiento. Un fallo en
+cualquier paso deja el archivo anterior intacto y el mensaje de error es cierto.
+
+**`backend_dir()` y el empaquetado.** Se construia con `env!("CARGO_MANIFEST_DIR")`,
+una ruta de *tiempo de compilacion*: valida con `cargo run` desde el checkout e
+inexistente en la maquina de cualquier otro. No era un problema de plataforma --
+se rompia igual en macOS -- pero se arreglo en el mismo repaso. Ahora se resuelve
+en ejecucion, en tres intentos: la variable `MISYKS_BACKEND`, luego `Backend/`
+junto al ejecutable (app empaquetada), y por ultimo la carpeta hermana de
+`Frontend/` en el checkout (desarrollo). Cada candidata se valida comprobando que
+contiene `sec/mail/__main__.py`, no solo que exista un directorio con ese nombre;
+si ninguna vale, el error dice donde ha buscado. En la misma linea,
+`ruta_interprete()` cae al Python del PATH cuando no hay venv en el Backend, en vez
+de fallar: es lo que hara falta en una app distribuida.
+
+**Ventanas de consola.** Una app de ventana que lanza un ejecutable de consola hace
+parpadear una ventana negra en Windows. `sec.mail` (Python) e `icacls` se lanzan
+ahora con `CREATE_NO_WINDOW` desde `Frontend/src/proceso.rs`, que en el resto de
+plataformas no hace nada.
+
+**El Backend si es instalable en Windows.** Comprobado: `sqlcipher3` 0.6.2 publica
+wheel `win_amd64` en PyPI, asi que no hay que compilar SQLCipher a mano. Era el
+riesgo gordo del lado Python y no existe.
+
+**Sin verificar — leer antes de dar Windows por soportado.** El mecanismo de
+`icacls` y la supervivencia de la ACL al rename estan comprobados ejecutandolos;
+el resto, no. **Nada de este codigo se ha compilado, en ninguna plataforma**: en la
+maquina del equipo no hay `cargo` instalado. Quedan tres incognitas que el primer
+`cargo build` resuelve de golpe:
+
+- que la firma de `getrandom` 0.3 sea `getrandom::fill(&mut buf)`;
+- que `rusqlite` con `bundled-sqlcipher-vendored-openssl` compile en MSVC, que
+  suele exigir Perl y NASM -- es decir, la premisa del comentario del `Cargo.toml`
+  ("que compile igual en cualquier plataforma sin pedir librerias de sistema
+  adicionales") puede no sostenerse en Windows;
+- que `iced` 0.14 se comporte en Windows, donde nunca se ha ejecutado.
+
+Tampoco se ha vuelto a compilar en macOS tras estos cambios.
+
 ---
 
 ## 9 · Alcance

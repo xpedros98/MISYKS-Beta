@@ -4,15 +4,25 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+#[cfg(windows)]
+use crate::proceso::sin_consola;
+
 pub struct LocalConfig {
     path: PathBuf,
     sections: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 impl LocalConfig {
+    /// `~/.misyks`, resuelto igual que lo resuelve Python.
+    ///
+    /// Tiene que coincidir exactamente con `Path.home()` de `config.py`: si
+    /// cada lado apunta a un directorio distinto, sec.mail sincroniza contra
+    /// una base y la app abre otra, vacia, y encima sin error visible. Por eso
+    /// se replica el orden de `os.path.expanduser("~")` de CPython en vez de
+    /// usar solo HOME -- que en Windows no suele estar definido (y en git-bash
+    /// lo esta, pero pudiendo apuntar a otra ruta).
     pub fn data_dir() -> PathBuf {
-        let home = std::env::var("HOME").expect("HOME no esta definido");
-        PathBuf::from(home).join(".misyks")
+        home_dir().join(".misyks")
     }
 
     pub fn path() -> PathBuf {
@@ -51,6 +61,15 @@ impl LocalConfig {
         Ok(nueva)
     }
 
+    /// Escribe el archivo restringiendo los permisos *antes* de volcar el
+    /// contenido: se crea un temporal vacio, se le recortan los permisos, se
+    /// escribe y solo entonces se renombra encima del definitivo.
+    ///
+    /// El orden importa. Escribir y restringir despues deja una ventana en la
+    /// que la contrasena de Gmail y la clave de la base estan en disco con los
+    /// permisos heredados; y si el recorte fallara, el secreto ya estaria
+    /// escrito mientras la UI dice "no se pudo guardar". Con el temporal, un
+    /// fallo significa que no se ha escrito nada y el mensaje es cierto.
     pub fn save(&self) -> std::io::Result<()> {
         std::fs::create_dir_all(Self::data_dir())?;
         let mut out = String::new();
@@ -61,8 +80,22 @@ impl LocalConfig {
             }
             out.push('\n');
         }
-        std::fs::write(&self.path, out)?;
-        restringir_permisos(&self.path)
+
+        let tmp = self.path.with_extension("tmp");
+        let escribir = || -> std::io::Result<()> {
+            std::fs::write(&tmp, "")?;
+            restringir_permisos(&tmp)?;
+            std::fs::write(&tmp, &out)?;
+            // En Windows fs::rename reemplaza el destino existente
+            // (MOVEFILE_REPLACE_EXISTING), igual que en Unix. Los permisos
+            // recortados viajan con el archivo al renombrarlo.
+            std::fs::rename(&tmp, &self.path)
+        };
+        let resultado = escribir();
+        if resultado.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        resultado
     }
 }
 
@@ -72,25 +105,92 @@ fn restringir_permisos(path: &std::path::Path) -> std::io::Result<()> {
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
 }
 
-#[cfg(not(unix))]
+/// Equivalente en Windows del `0o600`: deja el archivo con un unico ACE, el de
+/// la cuenta actual.
+///
+/// Sin esto el archivo hereda la ACL del perfil, que en una maquina real es
+/// `NT AUTHORITY\SYSTEM`, `BUILTIN\Administrators` y el propio usuario, los
+/// tres con FullControl (comprobado). Dentro estan la contrasena de aplicacion
+/// de Gmail y la clave de `sec_mail.db`, asi que la premisa del diseno -- los
+/// secretos no salen de la maquina del letrado -- pedia cerrarlo.
+///
+/// Se usa `icacls` en vez de la API Win32 (`SetNamedSecurityInfo`) para no
+/// arrastrar `windows-sys` y varios bloques `unsafe` por un solo ajuste:
+/// `/inheritance:r` borra los ACE heredados y `/grant:r` deja solo el nuestro.
+#[cfg(windows)]
+fn restringir_permisos(path: &std::path::Path) -> std::io::Result<()> {
+    let usuario = match std::env::var("USERNAME") {
+        Ok(u) if !u.is_empty() => u,
+        _ => return Err(std::io::Error::other("USERNAME no esta definido")),
+    };
+    // Con dominio si lo hay; en cuentas locales USERDOMAIN es el nombre de la
+    // maquina, que icacls resuelve igual de bien.
+    let cuenta = match std::env::var("USERDOMAIN") {
+        Ok(d) if !d.is_empty() => format!("{d}\\{usuario}"),
+        _ => usuario,
+    };
+
+    let mut orden = std::process::Command::new("icacls");
+    orden
+        .arg(path)
+        .arg("/inheritance:r")
+        .arg("/grant:r")
+        .arg(format!("{cuenta}:(F)"))
+        .arg("/q");
+    sin_consola(&mut orden);
+
+    let salida = orden.output()?;
+    if !salida.status.success() {
+        return Err(std::io::Error::other(format!(
+            "icacls no pudo restringir los permisos de {}: {}",
+            path.display(),
+            String::from_utf8_lossy(&salida.stderr).trim()
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
 fn restringir_permisos(_path: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 
 fn generar_clave_hex() -> String {
-    // 32 bytes de /dev/urandom (getrandom via el propio SO), sin depender de
-    // ninguna crate de criptografia adicional solo para esto.
     let bytes = leer_aleatorios(32);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-#[cfg(unix)]
+/// 32 bytes del RNG del sistema operativo.
+///
+/// Antes esto abria `/dev/urandom` a mano bajo `#[cfg(unix)]`, sin variante
+/// para Windows: no era un fallo en ejecucion, es que el binario no compilaba
+/// alli. `getrandom` hace la llamada nativa de cada plataforma y mantiene la
+/// intencion original de no arrastrar una crate de criptografia entera.
+///
+/// Entra en panico si el SO no puede dar entropia: es la clave que cifra
+/// sec_mail.db, asi que continuar con algo predecible seria peor que parar.
 fn leer_aleatorios(n: usize) -> Vec<u8> {
-    use std::io::Read;
-    let mut f = std::fs::File::open("/dev/urandom").expect("no se pudo abrir /dev/urandom");
     let mut buf = vec![0u8; n];
-    f.read_exact(&mut buf).expect("fallo leyendo /dev/urandom");
+    getrandom::fill(&mut buf).expect("el SO no pudo generar numeros aleatorios");
     buf
+}
+
+/// Mismo orden de preferencia que `os.path.expanduser("~")` de CPython, que es
+/// lo que hay detras de `Path.home()` en `Backend/sec/mail/config.py`.
+#[cfg(windows)]
+fn home_dir() -> PathBuf {
+    if let Ok(perfil) = std::env::var("USERPROFILE") {
+        return PathBuf::from(perfil);
+    }
+    if let (Ok(unidad), Ok(ruta)) = (std::env::var("HOMEDRIVE"), std::env::var("HOMEPATH")) {
+        return PathBuf::from(format!("{unidad}{ruta}"));
+    }
+    panic!("no se pudo determinar el directorio del usuario: ni USERPROFILE ni HOMEDRIVE+HOMEPATH")
+}
+
+#[cfg(not(windows))]
+fn home_dir() -> PathBuf {
+    PathBuf::from(std::env::var("HOME").expect("HOME no esta definido"))
 }
 
 fn parse_ini(contents: &str) -> BTreeMap<String, BTreeMap<String, String>> {

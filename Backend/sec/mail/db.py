@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS acciones (
 
 
 def abrir(ruta=config.DB_PATH):
-    """Abre la base. La clave se lee de MISYKS-Beta/.config (ver config.clave_db)."""
+    """Abre la base. La clave se lee de ~/.misyks/config (ver config.clave_db)."""
     ruta = Path(ruta)
     clave = config.clave_db()
     ruta.parent.mkdir(mode=0o700, parents=True, exist_ok=True)

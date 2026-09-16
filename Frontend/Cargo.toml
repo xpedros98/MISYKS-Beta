@@ -11,3 +11,10 @@ iced = "0.14"
 # vendored-openssl para que compile igual en cualquier plataforma sin pedir
 # librerias de sistema adicionales.
 rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
+
+# RNG del propio sistema operativo (getrandom(2) en Linux, BCryptGenRandom en
+# Windows) para la clave de sec_mail.db. No es una crate de criptografia: es el
+# envoltorio portable de la llamada del SO, que es lo que antes se hacia a mano
+# leyendo /dev/urandom -- y eso dejaba a Windows sin compilar. La version ya
+# estaba en Cargo.lock como dependencia transitiva de iced.
+getrandom = "0.3"

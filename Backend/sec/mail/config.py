@@ -35,9 +35,10 @@ def credenciales_gmail():
 def clave_db():
     """Clave hexadecimal (64 caracteres) que cifra la base de datos.
 
-    No se genera ni se guarda automaticamente: se escribe a mano en
-    MISYKS-Beta/.config, seccion [secmail], clave `clave`. Para generar una
-    nueva:
+    Vive en ~/.misyks/config, seccion [secmail], clave `clave`. Esta funcion
+    solo la lee: la genera la app (Frontend, LocalConfig::clave_db_o_generarla)
+    la primera vez que hace falta, antes de invocar a sec.mail. Si se usa el
+    Backend por separado, sin la app, hay que ponerla a mano:
 
         python3 -c "import secrets; print(secrets.token_hex(32))"
     """
