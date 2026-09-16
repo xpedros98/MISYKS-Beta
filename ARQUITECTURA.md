@@ -147,26 +147,166 @@ Regla dura: **nunca deja un placeholder vacío**. Si falta un dato, se pide.
 
 ---
 
-### Middleware transversal — `anonimizar`, pendiente
+### Middleware transversal — `anonimizar`, diseñado, sin implementar
 
-`anonimizar` no es un grupo: sería un filtro transversal que seudonimiza antes de
+`anonimizar` no es un grupo: es un filtro transversal que seudonimiza antes de
 cualquier llamada a un modelo y reinserta los datos reales en local al redactar.
-**No existe: no está implementado ni diseñado en detalle.** Donde las rutas de §6
-escriben `[anonimizar]`, hay un hueco, no un paso que ocurra.
+**No está implementado.** Donde las rutas de §6 escriben `[anonimizar]`, hay un
+hueco, no un paso que ocurra. Lo que sigue es el diseño acordado; hasta que exista
+código, cualquier ruta que lo invoque está incompleta y no debe darse por segura.
 
-Tres observaciones para cuando se aborde:
+#### Dos capas, y la primera no lleva modelo
 
-- **El alcance está sin decidir.** Se planteó como obligatorio en penal, familia y lo
-  que toque salud. Eso deja fuera el correo ordinario, que es el volumen real. Si el
-  criterio acaba siendo «antes de cualquier llamada al modelo», entonces es universal
-  y no por materia — y son dos sistemas distintos, no el mismo con más casos.
+El error de partida sería tratar la anonimización como un problema de NER. En un
+documento de despacho, lo que de verdad identifica a una persona suele tener forma
+fija, y eso se resuelve con expresiones regulares y validación de dígito de control:
+recall del 100 %, auditable, sin modelo y sin GPU.
+
+```
+capa 1 · determinista        identificadores y referencias de forma fija
+capa 2 · NER                 lo que no tiene forma fija
+```
+
+**Capa 1 — determinista.** Cubre DNI, NIE, CIF, NUSS, IBAN, tarjetas, matrículas,
+número de procedimiento y NIG, teléfonos, correos, direcciones postales y fechas de
+nacimiento. Todos esos formatos admiten validación —letra del DNI, IBAN mod 97, NIG
+por composición— así que un acierto es comprobable y un fallo es un `False` explícito,
+no una probabilidad baja que nadie mira.
+
+**Capa 2 — NER.** Nombres de persona, organizaciones y topónimos, que no tienen
+forma reconocible. Aquí sí hace falta un modelo de clasificación de tokens, y aquí
+es donde el sistema puede fallar en silencio.
+
+El orden importa: la capa 1 va primero y su resultado no lo revisa el modelo. Si la
+capa 2 se equivoca, la 1 ya ha retirado los identificadores fuertes; si se invirtiera
+el orden, un fallo del modelo podría arrastrar un DNI entero al exterior.
+
+La consecuencia práctica es que **la capa 1 es entregable por sí sola** y ya reduce
+la mayor parte del riesgo real. La capa 2 es el proyecto de verdad.
+
+#### El modelo de la capa 2
+
+**Decisión: se usa un modelo que ya viene con cabeza de NER entrenada.** Hoy,
+`PlanTL-GOB-ES/roberta-base-bne-capitel-ner` (BSC/SEDIA, Apache 2.0): clasificación
+de tokens lista para usar, en español, corriendo en local como exige §8.4. Está
+entrenado sobre español general y no jurídico, así que se espera que falle más en
+denominaciones societarias, órganos judiciales y topónimos poco frecuentes. Se acepta
+ese coste a cambio de tener la capa 2 funcionando sin una fase previa de
+entrenamiento.
+
+**Opción futura: RoBERTalex fine-tuneado por nosotros.** `PlanTL-GOB-ES/RoBERTalex`
+(mismo origen y licencia) es RoBERTa-base entrenado sobre 8,9 GB de corpus jurídico
+español — el dominio exacto del despacho. No se puede usar tal cual: es un modelo
+base de *masked language modeling*, da representaciones y no etiquetas, y su propia
+ficha dice que está listo solo para eso. Convertirlo en un anonimizador exige
+fine-tunearlo sobre un corpus de NER jurídico anotado que hay que conseguir o
+construir; de dónde sale ese corpus sigue abierto (más abajo).
+
+Cuando exista, se sustituye **midiendo contra el modelo en uso**, no por ser del
+dominio: si el fine-tuneado no mejora el recall medido, no entra.
+
+#### El mapa de seudónimos
+
+La estructura de datos es trivial —un diccionario `real ↔ seudónimo`— y da igual que
+haya tres personas o cuarenta. La dificultad no está en guardar las sustituciones,
+está en decidir **cuáles son las claves** y en que el texto vuelva del modelo en
+condiciones de deshacerlas.
+
+**Qué cuenta como la misma persona.** En un mismo expediente, Juan Pérez García
+aparece como «Juan Pérez García», «Juan Pérez», «el Sr. Pérez», «D. Juan» y
+«J. Pérez». Si cada forma es una entrada distinta, el modelo lee cinco personas donde
+hay una y todo su razonamiento sobre el caso queda mal; si son una sola entrada,
+alguien tiene que decidir que lo son, y eso es resolución de entidades, no un
+diccionario. Peor cuando hay dos Pérez en el mismo procedimiento: ahí la forma corta
+es genuinamente ambigua y al reinsertar no hay manera de saber a cuál volvía.
+
+**Que el texto vuelva entero.** La sustitución de ida es controlada; la vuelta no. El
+modelo redacta libremente y puede escribir `[PERSONA_4]` cuando solo se enviaron tres,
+partir una marca, o referirse a alguien sin usar la marca. Un `dict` invertido
+solo funciona si las marcas vuelven intactas, y eso no está garantizado: hay que
+validarlo, no suponerlo.
+
+**Concordancia gramatical.** Un seudónimo neutro obliga al modelo a adivinar el género
+—«[PERSONA_1] fue detenida» o «detenido», «del [PERSONA_1]» o «de la»— y al reinsertar
+el nombre real la concordancia equivocada se queda escrita. Los seudónimos deben
+llevar el género de la persona real.
+
+**Alcance — propuesta, sin decidir: por expediente y persistente.** No por documento.
+El argumento a favor: si `[PERSONA_1]` no significa lo mismo en dos escritos del mismo
+caso, el modelo no puede razonar sobre el expediente —no sabría que el demandado del
+escrito A y el del B son la misma persona— y se pierde justo lo que justifica mandarle
+contexto. El argumento en contra: un mapa que sobrevive a la sesión hay que cifrarlo
+y custodiarlo, y concentra en un fichero lo que el resto del diseño se dedica a
+dispersar. **El equipo no lo ha decidido**; hasta que lo haga, el alcance del mapa
+queda abierto y con él la vida útil del fichero.
+
+**Vive en local, nunca en `maat`.** Si el mapa llegara al servidor, la seudonimización
+no protegería de nada: quien accediera al servidor tendría el texto y la clave para
+deshacerlo.
+
+**Reinsertar es la mitad difícil.** Un fallo ahí no se ve: produce un escrito
+coherente con el nombre equivocado, que es peor que un escrito roto porque pasa la
+lectura. La reinserción debe ser total o fallar: si al redactar queda un
+`[PERSONA_n]` sin correspondencia en el mapa, el paso aborta y avisa al letrado. No
+se entrega un documento con seudónimos dentro ni se adivina a quién se refería.
+
+#### Verificación — propuesta de condición de uso
+
+Un middleware de anonimización sin una medida de su recall es un sello de confianza
+sin nada detrás: nadie sabe cuánto se le escapa, y la seguridad que aporta es una
+suposición.
+
+**Propuesta, pendiente de que el equipo la asuma o la rechace:** que `anonimizar` no
+autorice ninguna llamada a una API externa mientras no exista un conjunto de prueba
+con documentos reales anotados y una cifra de recall publicada en este documento. Si
+esa cifra no se puede dar, la consecuencia sería usar solo el modelo local de `maat`
+— que es donde está el proyecto hoy, así que adoptarla no cambia nada a corto plazo;
+lo que hace es fijar por adelantado qué haría falta para cambiarlo.
+
+Si se adopta, las dos capas se medirían por separado: la 1 debe dar recall 1,0 sobre
+sus formatos (si no, es un bug, no una métrica), y la 2 se reporta con su número
+real.
+
+**Mientras no se decida, no hay condición escrita** — y conviene saberlo: el hueco no
+es que falte la medición, es que nadie ha fijado quién autoriza la salida de datos ni
+con qué criterio.
+
+#### Qué no resuelve
+
+- **No desbloquea un cambio de arquitectura de agentes.** Que la seudonimización
+  funcione permite *llamar a un modelo externo*; no cambia que los contratos de los
+  56 sub-agentes sean de una llamada, entrada estructurada → salida estructurada.
+  Adoptar un framework de agentes con bucle propio, herramientas de disco y shell
+  sigue siendo un desajuste de forma, y sigue rompiendo el carácter auditable que
+  `AGENTES.md` exige al bloque determinista.
 - **No sostiene el argumento RGPD de §8.4.** `maat` está en la UE, así que enviarle
   datos no es transferencia internacional con o sin seudonimización. Anonimizar
-  reduciría el impacto de un acceso indebido al servidor; no cambia la base legal.
+  reduce el impacto de un acceso indebido al servidor; no cambia la base legal.
   Conviene no apoyarse en él para justificar la infraestructura.
-- **Reinsertar es la mitad difícil.** Seudonimizar es sustituir; devolver los datos
-  reales al redactar exige un mapa fiable por documento, y un fallo ahí no se ve:
-  produce un escrito coherente con el nombre equivocado.
+- **No reabre por sí solo la decisión de §8.4** (resumen con Ollama en `maat` frente
+  a API externa). Esa decisión se tomó comparando calidad, coste y confidencialidad;
+  `anonimizar` solo retira uno de los tres obstáculos.
+
+#### Decisiones abiertas
+
+- **El alcance sigue sin decidir.** Se planteó como obligatorio en penal, familia y
+  lo que toque salud. Eso deja fuera el correo ordinario, que es el volumen real. Si
+  el criterio acaba siendo «antes de cualquier llamada al modelo», entonces es
+  universal y no por materia — y son dos sistemas distintos, no el mismo con más
+  casos. Mientras no se decida, las rutas de §6 marcan `[anonimizar]` solo en el
+  arquetipo D.
+- **De dónde sale el corpus anotado** para el fine-tuning de RoBERTalex: anotación
+  interna sobre expedientes propios —que no pueden salir del despacho— frente a
+  corpus público, que existe para español general y no para jurídico.
+- **Si la verificación es vinculante** (arriba): sin regla escrita, la decisión de
+  mandar datos fuera queda al criterio de quien lo implemente, que es peor sitio que
+  este documento.
+- **El alcance del mapa de seudónimos** (por expediente y persistente, o por
+  documento y efímero): el primero permite razonar sobre el caso, el segundo reduce
+  lo que hay que custodiar. Propuesto arriba el primero, sin acordar.
+- **Qué hacer con los falsos positivos.** Seudonimizar de más degrada el texto que
+  lee el modelo y puede volverlo incomprensible. Nadie ha fijado todavía el umbral
+  ni si se prefiere errar por exceso.
 
 ### La capa de autoridad
 
@@ -657,53 +797,92 @@ sec.agenda           avisos de vencimiento, prórroga y actualización anual
 
 **Implementado — `sec.mail`**
 
-Primer sub-agente implementado. Gmail sobre IMAP con almacenamiento local cifrado.
-Corre en el ordenador del letrado. **Hoy no sube nada al servidor**: el resumen que
-lo haría sigue pendiente (más abajo). Cuando exista, subirá sin filtrar —
-`anonimizar` no está implementado (§1).
+Primer sub-agente implementado. Correo por **Gmail API autenticada con OAuth**
+(§8.6) y almacenamiento local cifrado. Corre en el ordenador del letrado. **Hoy no
+sube nada al servidor**: el resumen que lo haría sigue pendiente (más abajo). Cuando
+exista, subirá sin filtrar — `anonimizar` no está implementado (§1).
 
 | pieza | fichero |
 |---|---|
 | interfaz al resto del sistema | `sec/mail/agent.py` |
-| cliente IMAP | `sec/mail/imap.py` |
+| interfaz `Correo`, común a los tres mundos | `sec/mail/correo.py` |
+| flujo OAuth (PKCE + loopback), tokens y renovación | `sec/mail/oauth.py` |
+| adaptador de Gmail API | `sec/mail/google.py` |
+| adaptador de Microsoft Graph | `sec/mail/microsoft.py` |
+| cliente IMAP (tercer mundo, sin adaptador todavía) | `sec/mail/imap.py` |
 | parser de `.eml` | `sec/mail/parser.py` |
 | base SQLCipher | `sec/mail/db.py` |
-| credenciales y clave de la base | `sec/mail/config.py` |
+| tokens y clave de la base | `sec/mail/config.py` |
 | CLI | `sec/mail/__main__.py` |
 
-Superficie: `carpetas · sincronizar [--limite N] · listar · marcar_leido · mover`.
-Tablas: `correos · adjuntos · sincronizacion · acciones`.
+Superficie: `conectar · estado · desconectar · carpetas · sincronizar [--limite N] ·
+listar · leido · mover`. Tablas: `correos · adjuntos · sincronizacion · pendientes ·
+acciones`.
+
+El Backend sigue sin más dependencia que `sqlcipher3`: el flujo OAuth y las dos APIs
+van con la librería estándar (`urllib`, `http.server`).
 
 Frontend (`iced`): botón **Refrescar** en la pantalla Secretario invoca
-`sincronizar --limite 5` como subproceso y recarga la lista; se dispara también
-solo al guardar credenciales válidas en Ajustes. El límite de la tanda de
-descarga (5) y el límite de la lista mostrada (sin límite: se ve todo lo ya
-guardado) son valores independientes -- confundirlos fue un bug real de esta
-sesión, ya corregido.
+`sincronizar --limite 5` como subproceso y recarga la lista. Ajustes ya no tiene
+campos de texto sino **Conectar cuenta** por proveedor, con el estado de cada una;
+conectar dispara una sincronización. El límite de la tanda de descarga (5) y el
+límite de la lista mostrada (sin límite: se ve todo lo ya guardado) son valores
+independientes -- confundirlos fue un bug real, ya corregido.
 
 Decisiones que conviene no perder:
 
-- **Idempotencia por `UIDVALIDITY` + último UID.** Si el servidor reinicia los UID,
-  se recorre la carpeta entera; si no, se sigue desde donde se quedó. Resuelve el
-  modo de fallo clásico: reprocesar y duplicar tras una reconexión.
-- **`X-GM-MSGID` como identidad estable.** Los UID cambian al mover un correo de
-  carpeta; el identificador de Gmail no. Todas las acciones posteriores resuelven el
-  UID actual a partir de él.
+- **La identidad del mensaje es `(proveedor, mensaje_id)`.** El identificador de la
+  Gmail API no cambia nunca, tampoco al mover de etiqueta. En Graph **sí cambia al
+  mover**: la operación devuelve un mensaje nuevo, así que `mover` devuelve el
+  identificador resultante y la base se queda con ese. Una fila que apunte al
+  identificador viejo no da error, simplemente deja de resolver.
+- **Cursor opaco por proveedor.** `historyId` en Google, `deltaLink` en Graph. El
+  agente lo guarda y lo devuelve sin interpretarlo. Si el proveedor lo rechaza por
+  antiguo (404 en Google, 410 en Graph) se hace inventario completo de la carpeta en
+  vez de fallar: repetir identificadores es inofensivo, perderlos sería un correo que
+  el despacho no ve.
+- **Cola de pendientes.** Es lo que sustituye al puntero de UID de IMAP, y el punto
+  más delicado del cambio. Las dos APIs avanzan el cursor **de golpe** al final de la
+  respuesta, no mensaje a mensaje, así que el cursor ya no puede ser la garantía de
+  no perder nada. Lo anunciado por el servidor se apunta en `pendientes` *antes* de
+  guardar el cursor; cada correo sale de la cola solo cuando está guardado. Una
+  interrupción a mitad de tanda no pierde trabajo ni lo repite, que es la propiedad
+  que había que conservar.
+- **Inventario: el cursor se pide antes de listar.** Si se pidiera después, los
+  correos llegados durante el recorrido quedarían por debajo del cursor y no los
+  vería nadie nunca.
 - **Sincronización en solo lectura.** El agente lee sin marcar como leído: el letrado
   sigue viendo su bandeja intacta desde sus propios dispositivos.
-- **Avance correo a correo.** El puntero se guarda tras cada mensaje, así que una
-  interrupción no pierde trabajo ni lo repite.
-- **Sincronización en tandas.** `--limite N` corta la llamada a los N UIDs pendientes
-  más antiguos en vez de traer todo el histórico de golpe; como el puntero avanza
-  correo a correo, la siguiente tanda sigue justo donde la anterior se quedó, sin
-  duplicar nada (`guardar_correo` ya ignora un `gmail_msgid` repetido).
-- **Secretos en local, sin llavero del sistema.** Usuario y contraseña de aplicación
-  de Gmail (sección `[gmail]`) y clave de la base (sección `[secmail]`) viven en
-  `~/.misyks/config`, junto a la base `~/.misyks/sec_mail.db`. Fuera del repo, para que
-  sigan funcionando cuando la app se distribuya como binario. Los gestiona la pantalla
-  de Ajustes de la app; `sec.mail` solo los lee.
+- **Sincronización en tandas.** `--limite N` corta la descarga a los N pendientes más
+  antiguos; el resto se queda en la cola para la llamada siguiente.
+- **Secretos en local, sin llavero del sistema.** Los tokens de OAuth (sección
+  `[oauth.google]`) y la clave de la base (`[secmail]`) viven en `~/.misyks/config`,
+  junto a la base `~/.misyks/sec_mail.db`. Fuera del repo, para que sigan funcionando
+  cuando la app se distribuya como binario.
+- **`config.py` ya escribe, no solo lee.** Con contraseña de aplicación bastaba con
+  leer, porque la escribía la persona desde Ajustes. Con OAuth el access token caduca
+  cada hora y Microsoft rota el refresh token en cada renovación: quien renueva tiene
+  que poder guardar. Escribe solo su sección, con archivo temporal y reemplazo
+  atómico, para que un corte no deje la configuración sin la clave de la base -- que
+  dejaría la base ilegible.
 - **Registro de acciones** en tabla propia: todo lo que el agente hace sobre un correo
   queda anotado.
+
+**Migración desde la versión IMAP.** Las bases ya existentes se convierten al abrirlas
+y los correos descargados no se vuelven a bajar: el `id` de la Gmail API y el
+`X-GM-MSGID` de IMAP son el mismo número, en hexadecimal y en decimal, así que el
+identificador se traduce en sitio. Lo que no tiene traducción es el puntero
+`UIDVALIDITY` + último UID, que se descarta; la primera sincronización tras migrar
+hace inventario completo, que lista identificadores sin descargar nada, y descarta
+contra la base los que ya están.
+
+Con una trampa que costó un fallo real: desde SQLite 3.25, `ALTER TABLE ... RENAME`
+reescribe las referencias que otras tablas hacen a la renombrada, así que `adjuntos`
+y `acciones` pasaban a apuntar a la tabla temporal que la migración borraba después.
+La base seguía abriendo y leyendo con normalidad; el error (`no such table:
+correos_imap`) solo aparecía al guardar el primer adjunto, muy lejos de su causa. La
+migración usa ahora `PRAGMA legacy_alter_table`, y `_reparar_referencias` reconstruye
+las tablas de las bases que ya pasaron por la versión defectuosa.
 
 **Pendiente**
 
@@ -713,19 +892,30 @@ En `sec.mail`, respecto a lo descrito en `AGENTES.md`:
 - **descender por los reenvíos**: hoy un correo reenviado como adjunto se guarda entero
   como `.eml`, sin extraer sus adjuntos como documentos propios;
 - la **fecha de recepción**: se guarda la cabecera `Date` (la que declara el remitente)
-  y la hora de guardado, no la fecha de llegada al buzón (`INTERNALDATE`).
+  y la hora de guardado, no la fecha de llegada al buzón.
+
+Del paso a OAuth:
+
+- **Microsoft sin probar.** `microsoft.py` está escrito contra la interfaz `Correo`
+  pero no se ha ejecutado nunca contra una cuenta real: falta el registro de la
+  aplicación en Entra. Lo más probable que necesite ajuste es la paginación del delta.
+- **Registro y verificación de las apps.** Hoy cada máquina usa su propio `client_id`
+  en estado *Testing*, donde Google caduca el refresh token a los siete días. La app
+  publicada y verificada es trámite aparte (§8.6).
+- **Una cuenta por proveedor.** El esquema ya guarda `cuenta` en cada correo, pero
+  `config` elige un único proveedor activo: varias cuentas a la vez no están
+  resueltas.
+- **El consentimiento bloquea la interfaz.** Conectar una cuenta desde Ajustes lanza
+  un subproceso síncrono que espera a que alguien acepte en el navegador. Es el
+  candidato más claro a `Task` asíncrona de `iced`.
+- **Adaptador del tercer mundo.** `imap.py` sigue hablando de Gmail y usando sus
+  extensiones propias (`X-GM-MSGID`, `X-GM-LABELS`); para iCloud o Fastmail habrá que
+  sustituir la identidad estable por `Message-ID` o UID y quitar la lectura de
+  etiquetas.
 
 Los otros cinco de `secretario`: `sec.ocr`, `sec.clasificador`, `sec.agenda`,
 `sec.notificador`, `sec.entrega`. Después, grupo a grupo, según vaya funcionando cada
 uno.
-
-**Decidido por el código**
-
-La duda entre IMAP y API de Gmail queda resuelta: **IMAP**, a cambio de gestionar las
-credenciales, que es lo que resuelve `~/.misyks/config`. El protocolo es estándar, pero
-la implementación actual usa extensiones de Gmail (`X-GM-MSGID`, `X-GM-LABELS`) y
-`imap.gmail.com`: llevarla a otro proveedor exige sustituir esa identidad estable (por
-`Message-ID` o UID) y la lectura de etiquetas.
 
 ### 8.4 · Infraestructura: `maat` — hallazgo de seguridad pendiente
 
@@ -875,6 +1065,106 @@ maquina del equipo no hay `cargo` instalado. Quedan tres incognitas que el prime
 
 Tampoco se ha vuelto a compilar en macOS tras estos cambios.
 
+### 8.6 · Acceso a correo y calendario: OAuth
+
+Autenticación y transporte de `sec.mail` y `sec.agenda`. Alcance: cuentas de cualquier
+dominio.
+
+**Mecanismo.** Correo y calendario se obtienen de las APIs de cada proveedor,
+autenticadas con OAuth 2.0 en flujo por navegador. Ambos scopes se solicitan en un
+único consentimiento por cuenta. Las contraseñas de aplicación se usan solo en el
+tercer mundo de la tabla.
+
+| mundo | correo | calendario | cubre |
+|---|---|---|---|
+| Google | Gmail API | Calendar API, scope `calendar.events` | `@gmail.com` y todo Workspace |
+| Microsoft | Microsoft Graph | Graph, permiso `Calendars.ReadWrite` | `@outlook.com`, `@hotmail.com` y todo Microsoft 365 |
+| CalDAV/IMAP | IMAP con contraseña de aplicación | CalDAV con contraseña de aplicación | iCloud, Fastmail, Nextcloud, Zimbra, servidores propios |
+
+Los dos primeros mundos van por OAuth y comparten pantalla de consentimiento. El
+tercero usa contraseña de aplicación, y es el único que emplea `imap.py`.
+
+**Determinación del mundo.** Por los registros MX del dominio: `...google.com`,
+`...protection.outlook.com`, u otro. Un dominio propio alojado en Google Workspace o
+en Microsoft 365 cae en uno de los dos primeros mundos sin tratamiento adicional; un
+dominio de Workspace usa la misma app OAuth que una cuenta `@gmail.com`.
+
+**Registro de la aplicación.** Una única app externa, publicada en producción y
+verificada, compartida por todos los clientes. Quedan fuera del alcance la app interna
+(opera solo dentro de un Workspace propio) y la cuenta de servicio con delegación de
+dominio (exige que el cliente sea un Workspace y que su administrador la instale).
+
+Requisitos de publicación:
+
+- **Google.** Dominio verificado, política de privacidad alojada en él, vídeo de
+  demostración del flujo de consentimiento y justificación de cada scope.
+- **Microsoft.** *Publisher verification*: cuenta de trabajo de Entra -- no una cuenta
+  Microsoft personal -- e ID del Microsoft Cloud Partner Program.
+
+Ambos trámites se miden en semanas y son independientes del desarrollo.
+
+**Scopes.** El mínimo que cubre el contrato del agente. `calendar.events` da lectura y
+escritura de eventos; `calendar` completo no se solicita.
+
+**Restricciones del entorno.** Externas al proyecto:
+
+- Las contraseñas de aplicación de Google cubren IMAP, SMTP y POP. No existe
+  equivalente para calendario.
+- CalDAV de Google no acepta autenticación básica: deprecada en 2014 y retirada el
+  **14 de marzo de 2025** con el apagado de las *less secure apps*. Devuelve `401`.
+- Exchange Online tiene la autenticación básica de IMAP **eliminada desde el 1 de
+  octubre de 2022**.
+- Un administrador de Google Workspace puede desactivar las contraseñas de aplicación
+  en su dominio.
+- Exchange Web Services se bloquea en Exchange Online desde el **1 de octubre de
+  2026** (1 de marzo de 2026 en licencias F1, F3 y Kiosk), con apagado completo el 1
+  de abril de 2027. Su sustituto es Graph.
+
+**Flujo del cliente.** Una vez por cuenta, sin introducir datos en la aplicación:
+Ajustes, «Conectar cuenta», navegador en el dominio del proveedor, elección de cuenta,
+pantalla de consentimiento con correo y calendario, Permitir. La pestaña se cierra y
+la aplicación almacena el refresh token. La contraseña del cliente no se escribe en
+ninguna ventana de la aplicación.
+
+**Condiciones de operación.**
+
+- **El `client_secret` no es confidencial.** En una app de escritorio distribuida está
+  en el binario y es extraíble. El flujo para aplicaciones nativas es **PKCE con
+  redirect a loopback** (`127.0.0.1`, puerto libre), no el esquema de aplicación web.
+- **Los tokens se revocan externamente:** cambio de contraseña, revocación desde la
+  cuenta, o bloqueo de la app por un administrador de Workspace o Entra. La aplicación
+  distingue token caducado -- renovación sin intervención -- de token revocado, que
+  exige nuevo consentimiento y se refleja como estado visible en Ajustes.
+- **Consentimiento administrativo.** En tenants corporativos la autorización la
+  concede el administrador del dominio, no el usuario final. Es un estado previsto de
+  la conexión, no un error.
+- **La cuota es por proyecto**, repartida entre todos los clientes del producto, no
+  por usuario.
+
+**Modelo de datos.** Los tres mundos divergen en tres puntos, y los fallos derivados
+se manifiestan como plazos incorrectos, no como errores:
+
+- **Eventos recurrentes.** Las excepciones dentro de una serie -- una ocurrencia
+  movida o cancelada -- se representan de forma distinta en cada proveedor.
+- **Zonas horarias.** Un evento es una hora local con una zona asociada, no un
+  instante universal.
+- **Sincronización incremental.** Cada proveedor usa un mecanismo propio: sync tokens,
+  delta queries o ETags.
+
+**Interfaces.** `sec.mail` y `sec.agenda` no conocen el proveedor de origen. Hablan
+con `Correo` y `Calendario` -- esta última con `listar_eventos(desde, hasta)`,
+`crear_evento`, `actualizar` y `borrar` --, implementadas por un adaptador por mundo.
+
+**Almacenamiento de credenciales.** Las secciones `[oauth.google]` y
+`[oauth.microsoft]` de `~/.misyks/config` guardan, cada una, el `client_id` de la
+aplicación y los tokens de la cuenta conectada. Le aplican el recorte de permisos y el orden de escritura de `save()`
+de §8.5.
+
+**Ubicación de los tokens: sin decidir.** Si `sec.agenda` corre en `maat`, los refresh
+tokens de todos los clientes residen en el servidor; `sec.mail` corre en local por
+tener las credenciales (§8.3). Factores en juego: un agente de vigilancia de plazos
+debe operar con el equipo del letrado apagado, y un repositorio único de credenciales
+de todos los clientes concentra el impacto de un acceso indebido.
 ---
 
 ## 9 · Alcance

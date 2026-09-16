@@ -1,10 +1,10 @@
 // Lee directamente la base SQLCipher que rellena el agente Python
 // Backend/sec/mail (ver db.py) — mismo esquema, misma ruta, misma clave del
 // archivo de config local (~/.misyks/config). Este modulo no sincroniza con
-// Gmail ni escribe correos: solo lectura, igual que `python -m sec.mail
+// el buzon ni escribe correos: solo lectura, igual que `python -m sec.mail
 // listar`. sec.mail corre en local (no en el servidor) porque es quien tiene
-// la contrasena de correo — por eso ni la clave de la base ni las
-// credenciales salen nunca de este ordenador.
+// el acceso al correo — por eso ni la clave de la base ni los tokens de OAuth
+// salen nunca de este ordenador.
 use rusqlite::Connection;
 
 use crate::local_config::LocalConfig;
@@ -129,11 +129,11 @@ fn ruta_interprete(backend: &std::path::Path) -> std::path::PathBuf {
 }
 
 /// Invoca `python -m sec.mail sincronizar` en local, en tandas de `limite`
-/// correos (los mas antiguos sin descargar todavia). Necesita que Ajustes ya
-/// haya guardado usuario/password de Gmail en ~/.misyks/config -- si faltan,
-/// sec.mail lo dira con su propio mensaje de error (RuntimeError de Python),
-/// que se devuelve tal cual. No hay riesgo de duplicar: `guardar_correo`
-/// ignora un gmail_msgid que ya estuviera guardado (UNIQUE en la tabla).
+/// correos (los mas antiguos anunciados por el servidor y todavia sin bajar).
+/// Necesita que haya una cuenta conectada por OAuth (boton «Conectar cuenta»
+/// de Ajustes) -- si no la hay, sec.mail lo dira con su propio mensaje de
+/// error, que se devuelve tal cual. No hay riesgo de duplicar: la base ignora
+/// un mensaje ya guardado (indice unico por proveedor + identificador).
 pub fn sincronizar(limite: i64) -> Result<String, SecMailError> {
     // Genera la clave de la base ANTES de invocar a Python: config.clave_db()
     // (Python) solo lee, nunca genera -- si no existe todavia (primera vez,
@@ -142,21 +142,59 @@ pub fn sincronizar(limite: i64) -> Result<String, SecMailError> {
         .clave_db_o_generarla()
         .map_err(|e| SecMailError::Io(e.to_string()))?;
 
+    orden_secmail(&["sincronizar", "--limite", &limite.to_string()])
+}
+
+/// Lanza el consentimiento OAuth: abre el navegador en el dominio del
+/// proveedor y espera a que la persona autorice.
+///
+/// Bloquea hasta que termina, y puede tardar lo que tarde alguien en elegir
+/// cuenta y leer una pantalla de permisos (sec.mail espera hasta 5 minutos).
+/// La contrasena no se escribe en ninguna ventana de esta aplicacion: la pide
+/// Google en el navegador, que es justamente el motivo de haber dejado la
+/// contrasena de aplicacion (ARQUITECTURA.md 8.6).
+pub fn conectar(proveedor: &str) -> Result<String, SecMailError> {
+    orden_secmail(&["conectar", proveedor])
+}
+
+/// Revoca el acceso en el proveedor y borra los tokens de ~/.misyks/config.
+pub fn desconectar(proveedor: &str) -> Result<String, SecMailError> {
+    orden_secmail(&["desconectar", proveedor])
+}
+
+/// Estado de cada proveedor: `sin_conectar`, `conectado` o `revocado`.
+///
+/// Una linea por proveedor, tal como la imprime `python -m sec.mail estado`.
+/// `revocado` es un estado que hay que enseñar: el token caducado se renueva
+/// solo, pero un consentimiento retirado (contrasena cambiada, administrador
+/// que bloquea la app, o los 7 dias que dura un refresh token mientras la app
+/// de Google siga en estado *Testing*) exige volver a conectar a mano.
+pub fn estado_oauth() -> Result<Vec<(String, String, String)>, SecMailError> {
+    let salida = orden_secmail(&["estado"])?;
+    Ok(salida
+        .lines()
+        .filter_map(|linea| {
+            let mut campos = linea.split_whitespace();
+            let proveedor = campos.next()?.to_string();
+            let estado = campos.next()?.to_string();
+            let detalle = campos.collect::<Vec<_>>().join(" ");
+            Some((proveedor, estado, detalle))
+        })
+        .collect())
+}
+
+/// Ejecuta `python -m sec.mail ...` en la carpeta del Backend y devuelve su
+/// salida. Los errores de Python llegan por stderr con su mensaje ya
+/// redactado para una persona; se propagan tal cual en vez de reescribirlos.
+fn orden_secmail(args: &[&str]) -> Result<String, SecMailError> {
     let backend = backend_dir()?;
     let python = ruta_interprete(&backend);
     let mut orden = std::process::Command::new(&python);
-    orden
-        .args(["-m", "sec.mail", "sincronizar", "--limite", &limite.to_string()])
-        .current_dir(&backend);
+    orden.arg("-m").arg("sec.mail").args(args).current_dir(&backend);
     sin_consola(&mut orden);
-    let salida = orden
-        .output()
-        .map_err(|e| {
-            SecMailError::Sincronizacion(format!(
-                "no se pudo lanzar {}: {e}",
-                python.display()
-            ))
-        })?;
+    let salida = orden.output().map_err(|e| {
+        SecMailError::Sincronizacion(format!("no se pudo lanzar {}: {e}", python.display()))
+    })?;
 
     if !salida.status.success() {
         let stderr = String::from_utf8_lossy(&salida.stderr);

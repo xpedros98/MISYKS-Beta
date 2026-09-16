@@ -25,12 +25,17 @@ repo y puede no existir todavía en la máquina; compruébalo antes de dar por h
 que estas órdenes arrancan (crearlo: `INSTALACION.md`):
 
 ```bash
-python -m sec.mail carpetas                     # Lista carpetas de Gmail
+python -m sec.mail conectar google              # Autoriza una cuenta por OAuth (navegador)
+python -m sec.mail estado                       # conectado / revocado / sin conectar
+python -m sec.mail desconectar [PROVEEDOR]      # Revoca el acceso y borra los tokens
+python -m sec.mail carpetas                     # Lista carpetas del buzón
 python -m sec.mail sincronizar [CARPETA] -n 5   # Descarga una tanda de correos nuevos
 python -m sec.mail listar [N]                   # Últimos N correos ya guardados
 python -m sec.mail leido ID
 python -m sec.mail mover ID CARPETA
 ```
+
+`conectar` necesita un `client_id` en `~/.misyks/config` (`INSTALACION.md`).
 
 Frontend (desde `Frontend/`): `cargo run`, `cargo build`, `cargo clippy`.
 

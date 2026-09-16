@@ -1,0 +1,12 @@
+# Normaliza los finales de linea dentro del repositorio.
+#
+# El equipo trabaja en macOS (LF) y el PC del letrado en Windows (CRLF). Sin
+# esta norma, el formato que acaba en los commits depende del `core.autocrlf`
+# de cada maquina: basta con que alguien clone mal configurado para que sus
+# commits metan CRLF y el resto vea ficheros enteros marcados como modificados
+# aunque nadie haya tocado una linea.
+#
+# `text=auto` fija la norma en el repo en lugar de en cada maquina: todo
+# fichero de texto se almacena en LF, y cada sistema lo ve en su formato
+# nativo al trabajar.
+* text=auto

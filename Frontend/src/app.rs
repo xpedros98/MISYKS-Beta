@@ -1,11 +1,11 @@
 use iced::widget::{button, column, row};
 use iced::Element;
 
-use crate::screens::settings::{EstadoGuardado, SettingsState};
+use crate::screens::settings::SettingsState;
 use crate::screens::{self, Screen};
 use crate::secretario::{self, EmailSummary, SecMailError};
 
-// Cuantos correos NUEVOS se piden a Gmail por cada pulsacion de Refrescar.
+// Cuantos correos NUEVOS se bajan por cada pulsacion de Refrescar.
 const TANDA_SINCRONIZACION: i64 = 5;
 // Cuantos correos se muestran en la lista: -1 en SQLite es "sin limite" (ver
 // secretario::list_emails) -- se quiere ver todo lo ya guardado, no solo la
@@ -36,26 +36,26 @@ impl Default for State {
 #[derive(Debug, Clone)]
 pub enum Message {
     NavigateTo(Screen),
-    GmailUsuarioChanged(String),
-    GmailPasswordChanged(String),
-    GuardarCredenciales,
+    ConectarCuenta(String),
+    DesconectarCuenta(String),
     RefrescarSecretario,
 }
 
 pub fn update(state: &mut State, message: Message) {
     match message {
         Message::NavigateTo(screen) => state.current_screen = screen,
-        Message::GmailUsuarioChanged(valor) => state.settings.usuario = valor,
-        Message::GmailPasswordChanged(valor) => state.settings.password = valor,
-        Message::GuardarCredenciales => {
-            state.settings.guardar();
-            // Bloqueante (llama a IMAP por red): aceptable ahora mismo por
-            // simplicidad, pero un candidato claro a Task async si la espera
-            // se nota en la UI.
-            if matches!(state.settings.estado, EstadoGuardado::Guardado) {
+        Message::ConectarCuenta(proveedor) => {
+            // Bloqueante, y aqui se nota mas que antes: el consentimiento
+            // depende de que una persona acepte en el navegador, no de una
+            // llamada de red que tarda un segundo. Es el candidato numero uno
+            // a Task async; se deja sincrono mientras la app sea de un solo
+            // usuario y esta pantalla no tenga nada mas que hacer entretanto.
+            state.settings.conectar(&proveedor);
+            if state.settings.hay_cuenta() {
                 sincronizar_y_recargar(state);
             }
         }
+        Message::DesconectarCuenta(proveedor) => state.settings.desconectar(&proveedor),
         Message::RefrescarSecretario => sincronizar_y_recargar(state),
     }
 }

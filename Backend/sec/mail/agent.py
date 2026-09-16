@@ -1,89 +1,103 @@
 """SecMail: la interfaz del sub-agente de correo para el resto de MISYKS."""
 import json
 
-from . import config, db, parser
-from .imap import Gmail
+from . import correo as correo_api
+from . import db, parser
 
 
 class SecMail:
-    def __init__(self, base=None):
+    def __init__(self, base=None, buzon=None):
         self.db = base or db.abrir()
+        self._buzon = buzon  # se abre al primer uso: `listar` no necesita red
 
     def cerrar(self):
         self.db.cerrar()
 
+    @property
+    def buzon(self):
+        """El buzón OAuth de la cuenta conectada (Gmail API o Microsoft Graph)."""
+        if self._buzon is None:
+            self._buzon = correo_api.abrir()
+        return self._buzon
+
     def carpetas(self):
-        with self._gmail() as gmail:
-            return gmail.carpetas()
+        return self.buzon.carpetas()
 
     def sincronizar(self, carpeta="INBOX", limite=None):
         """Guarda los correos nuevos de una carpeta sin marcarlos como leídos.
 
-        `limite` corta la tanda a los primeros N UIDs pendientes (los más
-        antiguos sin descargar todavía) en vez de traer toda la carpeta de
-        golpe; el puntero avanza correo a correo, así que la siguiente
-        llamada sigue exactamente donde esta se quedó. `guardar_correo`
-        ignora los que ya estén guardados (UNIQUE en gmail_msgid), así que
-        repetir un UID nunca duplica una fila.
+        Dos pasos con propósitos distintos, y conviene no confundirlos:
+
+        1. **Preguntar** al servidor qué hay de nuevo. Las dos APIs contestan
+           con un cursor -- `historyId` en Google, `deltaLink` en Graph -- que
+           avanza de golpe al final de la respuesta, no mensaje a mensaje como
+           hacía el UID de IMAP. Lo anunciado se apunta en la cola de
+           pendientes *antes* de guardar el cursor: si se guardara primero y
+           el proceso muriera, esos correos no los volvería a anunciar nadie.
+        2. **Traer** de la cola. `limite` corta la tanda a los N más antiguos
+           pendientes; el resto sigue en la cola para la siguiente llamada.
+
+        Que el cursor avance de golpe es el cambio real respecto a IMAP: lo
+        que garantiza no perder ni duplicar ya no es el puntero, sino la cola
+        (cada correo sale de ella solo cuando está guardado) más el índice
+        único de `correos`, que ignora un mensaje ya descargado.
 
         Devuelve cuántos correos se guardaron por primera vez.
         """
+        buzon = self.buzon
+        cursor = self.db.cursor_sincronizacion(buzon.proveedor, carpeta)
+        anunciados, cursor_nuevo = buzon.listar_nuevos(carpeta, cursor)
+        self.db.encolar(buzon.proveedor, carpeta, anunciados)
+        self.db.guardar_cursor(buzon.proveedor, carpeta, cursor_nuevo)
+
         nuevos = 0
-        with self._gmail() as gmail:
-            uidvalidity = gmail.seleccionar(carpeta, solo_lectura=True)
-            validez_guardada, ultimo_uid = self.db.estado(carpeta)
-            if validez_guardada != uidvalidity:  # UIDs reiniciados en el servidor: se recorre entera
-                ultimo_uid = 0
-            pendientes = gmail.uids_desde(ultimo_uid)
-            if limite is not None:
-                pendientes = pendientes[:limite]
-            for uid in pendientes:
-                descarga = gmail.descargar(uid)
-                if descarga is not None:
-                    correo = parser.parsear(descarga["eml"])
-                    correo.update(
-                        gmail_msgid=descarga["gmail_msgid"],
-                        carpeta=carpeta,
-                        etiquetas=json.dumps(descarga["etiquetas"], ensure_ascii=False),
-                        leido=int(descarga["leido"]),
-                        eml=descarga["eml"],
-                    )
-                    if self.db.guardar_correo(correo) is not None:
-                        nuevos += 1
-                # Se avanza correo a correo: si se corta, la siguiente vez sigue desde aquí.
-                self.db.avanzar(carpeta, uidvalidity, uid)
+        for mensaje_id in self.db.pendientes(buzon.proveedor, carpeta, limite):
+            descarga = buzon.descargar(mensaje_id)
+            if descarga is not None:
+                correo = parser.parsear(descarga["eml"])
+                correo.update(
+                    proveedor=buzon.proveedor,
+                    cuenta=buzon.cuenta,
+                    mensaje_id=descarga["mensaje_id"],
+                    carpeta=carpeta,
+                    etiquetas=json.dumps(descarga["etiquetas"], ensure_ascii=False),
+                    leido=int(descarga["leido"]),
+                    eml=descarga["eml"],
+                )
+                if self.db.guardar_correo(correo) is not None:
+                    nuevos += 1
+            # Sale de la cola tanto si se guardó como si ya no existía en el
+            # servidor; en los dos casos no hay nada más que hacer con él. Se
+            # borra uno a uno: si esto se corta, la siguiente vez sigue aquí.
+            self.db.desencolar(buzon.proveedor, carpeta, mensaje_id)
         return nuevos
+
+    def pendientes(self, carpeta="INBOX"):
+        """Cuántos correos hay anunciados y todavía sin descargar."""
+        return self.db.cuantos_pendientes(self.buzon.proveedor, carpeta)
 
     def listar(self, limite=20):
         return self.db.listar(limite)
 
     def marcar_leido(self, correo_id):
         fila = self._fila(correo_id)
-        with self._gmail() as gmail:
-            gmail.seleccionar(fila["carpeta"], solo_lectura=False)
-            gmail.marcar_leido(_uid_actual(gmail, fila))
+        self.buzon.marcar_leido(fila["mensaje_id"])
         self.db.marcar_leido(correo_id)
 
     def mover(self, correo_id, destino):
         fila = self._fila(correo_id)
-        with self._gmail() as gmail:
-            gmail.seleccionar(fila["carpeta"], solo_lectura=False)
-            gmail.mover(_uid_actual(gmail, fila), destino)
-        self.db.mover(correo_id, fila["carpeta"], destino)
-
-    def _gmail(self):
-        return Gmail(*config.credenciales_gmail())
+        # En Graph el identificador cambia al mover; en Gmail no. El adaptador
+        # devuelve el que vale a partir de ahora y la base se queda con ese.
+        mensaje_id = self.buzon.mover(fila["mensaje_id"], destino, origen=fila["carpeta"])
+        self.db.mover(
+            correo_id,
+            fila["carpeta"],
+            destino,
+            mensaje_id=mensaje_id if mensaje_id != fila["mensaje_id"] else None,
+        )
 
     def _fila(self, correo_id):
         fila = self.db.correo(correo_id)
         if fila is None:
             raise LookupError(f"No hay ningún correo con id {correo_id} en la base.")
         return fila
-
-
-def _uid_actual(gmail, fila):
-    # Los UIDs cambian al mover correos; X-GM-MSGID no.
-    uid = gmail.buscar_msgid(fila["gmail_msgid"])
-    if uid is None:
-        raise LookupError(f"El correo {fila['id']} ya no está en la carpeta {fila['carpeta']} de Gmail.")
-    return uid

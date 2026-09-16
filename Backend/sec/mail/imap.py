@@ -1,4 +1,19 @@
-"""Conexión con Gmail por IMAP, solo con la librería estándar."""
+"""Conexión por IMAP, solo con la librería estándar.
+
+**Fuera del camino principal desde el paso a OAuth.** Gmail y Microsoft ya no
+pasan por aquí: van por su API autenticada con OAuth (`google.py`,
+`microsoft.py`, `oauth.py`), porque la autenticación básica de IMAP está
+retirada en Exchange Online desde 2022 y porque en Google obligaba a una
+contraseña de aplicación, que un administrador de Workspace puede desactivar
+y que no sirve para calendario.
+
+Este módulo se conserva para el tercer mundo de ARQUITECTURA.md 8.6 -- iCloud,
+Fastmail, Nextcloud, Zimbra, servidores propios --, el único que sigue usando
+contraseña de aplicación. Todavía no tiene adaptador que implemente la
+interfaz `Correo`, y el código de aquí abajo sigue hablando de Gmail y usando
+sus extensiones propias (`X-GM-MSGID`, `X-GM-LABELS`), que habrá que sustituir
+por `Message-ID` o UID cuando se escriba ese adaptador.
+"""
 import base64
 import imaplib
 import re

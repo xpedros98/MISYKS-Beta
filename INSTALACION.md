@@ -69,7 +69,8 @@ python3 -m venv .venv
 cd ..
 ```
 
-La única dependencia es `sqlcipher3`, y hay paquete precompilado tanto para Apple
+La única dependencia sigue siendo `sqlcipher3` -- OAuth y las dos APIs de correo
+van con la librería estándar, sin añadir nada --, y hay paquete precompilado tanto para Apple
 Silicon como para Intel, así que no hace falta instalar SQLCipher aparte.
 
 Para comprobar que responde:
@@ -79,9 +80,56 @@ cd Backend
 .venv/bin/python -m sec.mail carpetas
 ```
 
-Sin credenciales de Gmail configuradas dará un error diciendo que faltan, y eso es
-lo esperado en este punto: las credenciales se escriben desde la pantalla de Ajustes
-de la app, no a mano.
+Sin ninguna cuenta conectada dará un error diciendo que no la hay, y eso es lo
+esperado en este punto.
+
+### Registrar la aplicación ante Google
+
+El acceso al correo es por OAuth: no hay contraseña que escribir en ningún sitio
+(ARQUITECTURA.md 8.6). A cambio, la aplicación tiene que estar registrada ante
+Google, y mientras no exista una app publicada y verificada del despacho, cada
+máquina usa la suya. Se hace una vez y son diez minutos:
+
+1. En `console.cloud.google.com`, crear un proyecto (por ejemplo `misyks`).
+2. **APIs y servicios → Biblioteca**: habilitar **Gmail API** y **Google Calendar
+   API**.
+3. **Pantalla de consentimiento de OAuth**: tipo **Externo**, con nombre y correos
+   de contacto. Se deja en estado **Testing**.
+4. **Usuarios de prueba**: añadir las direcciones que vayáis a conectar. En estado
+   *Testing* solo esas pueden autorizar, hasta un máximo de 100.
+5. **Credenciales → Crear credenciales → ID de cliente de OAuth → Aplicación de
+   escritorio**. Copiar el `client_id` y el `client_secret`.
+6. Escribirlos en `~/.misyks/config`:
+
+   ```ini
+   [oauth.google]
+   client_id = ....apps.googleusercontent.com
+   client_secret = ...
+   ```
+
+   Ese `client_secret` no es un secreto real: en una aplicación de escritorio va
+   dentro del binario y cualquiera puede extraerlo. Lo que protege el intercambio
+   es PKCE, no él. El que **sí** hay que cuidar es el token que aparece en esa
+   misma sección después de conectar: ese da acceso al correo.
+
+Ya se puede conectar la cuenta:
+
+```bash
+.venv/bin/python -m sec.mail conectar google
+```
+
+Se abre el navegador, se elige la cuenta y se acepta. Como la app está en estado
+*Testing* aparecerá un aviso de «Google no ha verificado esta aplicación»: se
+continúa con **Configuración avanzada → Ir a (nombre del proyecto)**. La misma
+operación se puede hacer desde la pantalla de Ajustes de la app.
+
+**Dos avisos del estado *Testing*.** El permiso caduca a los siete días y hay que
+volver a conectar: no es un fallo, es cómo trata Google a las apps sin publicar.
+Y `python -m sec.mail estado` dirá entonces `revocado`, que es el estado previsto
+para eso.
+
+Microsoft todavía no tiene registro hecho: el adaptador de Graph está escrito pero
+sin probar contra una cuenta real.
 
 ## 4 · Preparar el Frontend
 
@@ -93,10 +141,38 @@ cargo build
 El primer build tarda: compila OpenSSL y SQLCipher desde fuente (van incrustados a
 propósito, para no depender de librerías del sistema). Los siguientes son rápidos.
 
-> **Aviso.** El Frontend está en desarrollo y todavía no se ha compilado en ningún
-> equipo del proyecto, así que este paso puede fallar. Si os da error, no os peleéis
-> con él: pasadlo al grupo con el mensaje completo. El contexto está en
-> `ARQUITECTURA.md` §8.5.
+### Si compiláis en Windows
+
+En Mac no hace falta nada más. En Windows sí: ese OpenSSL que se compila desde fuente
+se configura con un script de Perl, y Windows no trae Perl. Sin él, `cargo build`
+muere con `Command 'perl' not found. Is perl installed?` antes siquiera de empezar a
+compilar código Rust.
+
+```powershell
+winget install --id StrawberryPerl.StrawberryPerl -e
+```
+
+Tiene que ser **Strawberry Perl**. El Perl que viene dentro de Git para Windows
+(`C:\Program Files\Git\usr\bin\perl.exe`) no sirve aunque lo pongáis en el `PATH`: es
+una versión de Cygwin recortada a la que le faltan módulos del núcleo
+(`Locale::Maketext::Simple`), y el `Configure` de OpenSSL se cae igual.
+
+Cerrad y volved a abrir el terminal después de instalarlo, para que Perl entre en el
+`PATH`. NASM no hace falta: el build pide OpenSSL sin ensamblador.
+
+Perl es una dependencia **solo de compilación**. No entra en el binario ni hace falta
+en el ordenador de quien acabe usando la app: OpenSSL y SQLCipher quedan enlazados
+estáticamente dentro del `.exe`.
+
+Durante el enlazado veréis una avalancha de avisos `LNK4099: PDB 'ossl_static.pdb' was
+not found`. Son ruido del OpenSSL incrustado, que no trae símbolos de depuración. La
+compilación termina bien.
+
+> **Aviso.** El Frontend está en desarrollo. Compila en Windows (probado el 16 de
+> septiembre de 2026, algo menos de 8 minutos el primer build), pero en macOS todavía
+> no lo ha levantado nadie del proyecto, así que este paso puede fallar. Si os da
+> error, no os peleéis con él: pasadlo al grupo con el mensaje completo. El contexto
+> está en `ARQUITECTURA.md` §8.5.
 
 ## 5 · Y ya
 
