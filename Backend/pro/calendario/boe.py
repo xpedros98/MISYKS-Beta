@@ -102,18 +102,26 @@ def _descarga(url, cabeceras=None):
         raise
 
 
-def localizar(anio, computo, registro=None):
+def localizar(anio, computo, registro=None, hoy=None):
     """Busca en los sumarios del BOE la resolución de ese año y cómputo.
 
     Devuelve `{'id', 'url_xml', 'publicado'}` o None si no aparece. Que
     devuelva None no es un error: en septiembre, la resolución del año
     siguiente puede no estar publicada todavía, y esa es la diferencia entre
     `sin_publicar` y `pendiente` en la cobertura.
+
+    `hoy` existe para poder probar el corte del rastreo sin depender de la
+    fecha real de la máquina.
     """
     patron = PATRONES[computo].format(anio=anio)
     mes_i, dia_i, mes_f, dia_f = VENTANA
     dia = date(anio - 1, mes_i, dia_i)
-    fin = date(anio - 1, mes_f, dia_f)
+    # El rastreo no pasa de hoy: un sumario de un día que todavía no ha
+    # ocurrido no existe, y pedirlo son unas setenta y cinco peticiones
+    # inútiles por cómputo cada vez que se busca el año que viene antes de
+    # octubre. No cambia el resultado --sin hallazgo, la cobertura queda
+    # `sin_publicar` igual--, solo lo que se tarda en llegar a él.
+    fin = min(date(anio - 1, mes_f, dia_f), hoy or date.today())
     while dia <= fin:
         # Los sumarios de sábado y domingo no existen: el BOE no publica.
         if dia.weekday() < 5:
