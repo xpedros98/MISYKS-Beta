@@ -63,11 +63,8 @@ Detallada en ARQUITECTURA.md.
 
 AGENTES.md lista los agentes: solo incluye información de para qué sirve cada uno y
 sus restricciones. Esas restricciones son invariantes, no estilo: al romperlas, el
-código sigue compilando y aparentemente funcionando.
-
-Los agentes de IA (los que invocan un LLM) corren todos en el servidor `maat`. Los
-agentes de software corren donde están sus datos y credenciales: `sec.mail`, en el
-PC del letrado.
+código sigue compilando y aparentemente funcionando. Ahí está también dónde corre
+cada agente.
 
 ## Historial
 

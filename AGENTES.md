@@ -21,8 +21,10 @@ escritas.
 **Dónde corre cada uno.** Los agentes de IA —los que invocan un modelo de
 lenguaje— corren todos en el servidor `maat`, porque ahí está el modelo. Los
 agentes de software, deterministas y sin LLM, corren donde están sus datos y sus
-credenciales: `sec.mail` en el PC del letrado. Ver `ARQUITECTURA.md` §1, «Dónde
-corre cada agente».
+credenciales: `sec.mail` en el PC del letrado, y `pro.calendario` también, porque
+el motor de días consulta expedientes. Su recolector es la excepción que confirma
+la regla: solo lee boletines públicos, así que puede correr en el servidor. Ver
+`ARQUITECTURA.md` §1, «Dónde corre cada agente».
 
 ---
 
