@@ -57,13 +57,18 @@ intentó leer una fuente y reventó. `pendiente` es que aún no hay extractor pa
 ella, y `sin publicar`, que el boletín no ha sacado ese año todavía. Los tres dan
 fecha prudente por igual; la distinción es para mantenimiento, no para el motor.
 
-`estado` cierra con dos datos que **no son lo mismo**: el último festivo guardado
-(dónde acaban las filas) y el horizonte firme por ámbito (hasta cuándo una fecha
-puede salir firme). Con 2026 confirmado entero son el 26 y el 31 de diciembre: los
-días sin festivo entre medias también son dato. Un ámbito solo cuenta como firme
-si toda su cadena lo está, así que Madrid sale firme en judicial y no en
-administrativo — sus fiestas locales las tenemos, el calendario administrativo de
-su comunidad no.
+`estado` cierra con el **último festivo guardado**, que es dónde acaban las filas y
+**no** hasta cuándo se puede uno fiar. Con 2026 confirmado entero dice 26 de
+diciembre, y sin embargo el calendario sirve hasta el 31: los días sin festivo
+entre medias también son dato. Lo segundo es `db.horizonte(ámbito, cómputo)`, que
+no se lista en `estado` porque son 32 ámbitos por 2 cómputos; para un sitio
+concreto lo dicen `festivos` y `calendario`, que avisan de sus lagunas.
+
+Un ámbito solo llega a firme si **toda su cadena** lo está (`08019 → ES-CT → ES`):
+un eslabón sin confirmar la invalida entera, porque sin las fiestas locales no se
+puede afirmar que un día sea hábil. Por eso Madrid sale firme en judicial y no en
+administrativo — sus fiestas del ayuntamiento las tenemos, el calendario
+administrativo de su comunidad no.
 
 **Dónde viven los datos.** Las dos bases están en `~/.misyks/`, fuera del repo:
 `sec_mail.db` (SQLCipher, con clave en `~/.misyks/config`) y `calendario.db`

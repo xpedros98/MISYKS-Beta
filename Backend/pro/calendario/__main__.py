@@ -105,7 +105,7 @@ def _estado(cal):
     print()
     print("  pendiente    = no se ha intentado: no hay extractor para esa fuente")
     print("  sin publicar = se miró y el boletín aún no ha sacado ese año")
-    print("  FALLIDO      = se intentó y falló (lo único que pide actuar)")
+    print("  FALLIDO      = se intentó y falló")
 
     # Lo fallido se detalla siempre: es lo unico de esta pantalla que pide que
     # alguien haga algo. Lo demas es estado normal del trabajo pendiente.
@@ -122,26 +122,18 @@ def _estado(cal):
 
 
 def _horizontes(cal, anios):
-    """Hasta dónde llegan los datos, y hasta dónde se puede uno fiar.
+    """Hasta dónde llegan los datos anotados.
 
-    Son dos cosas distintas y por eso van separadas. La última fecha anotada
-    solo dice dónde acaban las filas; el horizonte dice hasta cuándo una fecha
-    puede salir firme, que es lo que decide un plazo. Con 2026 confirmado
-    entero, el último festivo es el 26 de diciembre pero el horizonte llega al
-    31: el año está completo, y los días sin festivo también son dato.
+    Es dónde acaban las filas, y **no** hasta cuándo se puede uno fiar. Con
+    2026 confirmado entero, esto dice 26 de diciembre --el último festivo-- y
+    sin embargo el calendario sirve hasta el 31, porque el año está completo y
+    los días sin festivo también son dato. Eso otro es `db.horizonte()`, que se
+    calcula por ámbito y cómputo; aquí no se lista porque son treinta y dos
+    ámbitos por dos cómputos y la pantalla dejaba de leerse. Se consulta desde
+    la API, o con `festivos`/`calendario`, que ya avisan de las lagunas del
+    sitio concreto.
     """
     print(f"\nÚltimo festivo guardado: {cal.ultimo_festivo() or 'ninguno'}")
-    print("Firme hasta — un ámbito sale aquí solo si toda su cadena está confirmada:")
-    por_fecha = {}
-    for fila in cal.conn.execute("SELECT id FROM ambitos ORDER BY id"):
-        for computo in db.COMPUTOS:
-            clave = (cal.horizonte(fila["id"], computo, desde=anios[0]), computo)
-            por_fecha.setdefault(clave, []).append(fila["id"])
-    for (fecha, computo), ambitos in sorted(
-        por_fecha.items(), key=lambda x: (x[0][0] is None, x[0][0] or "", x[0][1])
-    ):
-        muestra = ", ".join(ambitos[:5]) + ("..." if len(ambitos) > 5 else "")
-        print(f"  {fecha or 'nada firme':12} {computo:15} {len(ambitos):3} ámbitos  {muestra}")
 
 
 def _festivos(cal, ambito, anio):
