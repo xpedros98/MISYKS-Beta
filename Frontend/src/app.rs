@@ -74,13 +74,16 @@ fn sincronizar_y_recargar(state: &mut State) {
 }
 
 pub fn view(state: &State) -> Element<'_, Message> {
-    let nav = row![
-        nav_button(Screen::Home, state.current_screen),
-        nav_button(Screen::Secretario, state.current_screen),
-        nav_button(Screen::Calendario, state.current_screen),
-        nav_button(Screen::Ajustes, state.current_screen),
-    ]
-    .spacing(4);
+    let nav = crate::estilo::barra(
+        row![
+            nav_button(Screen::Home, state.current_screen),
+            nav_button(Screen::Secretario, state.current_screen),
+            nav_button(Screen::Calendario, state.current_screen),
+            nav_button(Screen::Ajustes, state.current_screen),
+        ]
+        .spacing(4),
+    )
+    .width(Length::Fill);
 
     let content = match state.current_screen {
         Screen::Home => screens::home::view(),
@@ -95,16 +98,16 @@ pub fn view(state: &State) -> Element<'_, Message> {
 }
 
 fn nav_button(target: Screen, current: Screen) -> Element<'static, Message> {
-    let label = target.label();
-    // La pestana activa se rellena y las demas quedan planas: es lo que hace
-    // que se lean como pestanas y no como una fila de botones iguales. Sin
-    // esto, la unica pista de donde estas era que una no se podia pulsar.
-    if target == current {
-        button(label).style(button::primary).into()
+    let activa = target == current;
+    // Cada seccion tiene su color y solo se ve cuando esta activa: sirve para
+    // saber donde estas sin leer, y no compite con nada porque las demas
+    // pestanas quedan transparentes.
+    let boton = button(target.label())
+        .padding([6, 14])
+        .style(crate::estilo::pestana(target.color(), activa));
+    if activa {
+        boton.into()
     } else {
-        button(label)
-            .style(button::text)
-            .on_press(Message::NavigateTo(target))
-            .into()
+        boton.on_press(Message::NavigateTo(target)).into()
     }
 }

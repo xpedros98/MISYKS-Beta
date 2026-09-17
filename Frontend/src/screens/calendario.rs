@@ -6,12 +6,12 @@
 // describe AGENTES.md -- que el calendario envejezca en silencio -- poniendo
 // delante de alguien del equipo lo que falta y lo que se ha roto.
 //
-// El color no es decoracion: dice urgencia. Lo confirmado se apaga, lo fallido
-// resalta, y lo pendiente se queda en gris porque es trabajo previsto y no una
-// averia. Un cero en la columna FALLIDO tambien va apagado -- resaltar un cero
-// haria que la columna gritara siempre y dejara de significar nada. Todos los
-// colores salen de `estilo`, para que no signifiquen cosas distintas segun la
-// pantalla.
+// La tabla va **en un solo color**. Una version anterior pintaba cada estado y
+// cada nivel del suyo, y el resultado era que no destacaba nada: con cinco
+// colores compitiendo, el ojo no sabe donde mirar. El unico acento es lo que
+// pide accion --una averia, o una cifra distinta de cero en FALLIDO--, y lo que
+// esta bien se atenua en vez de colorearse. El color que identifica cosas vive
+// en la barra de navegacion, no aqui.
 use iced::widget::{button, column, container, row, scrollable, text, Space};
 use iced::{Element, Length};
 
@@ -147,16 +147,12 @@ fn tabla_cobertura(resumen: &crate::calendario::Resumen) -> Element<'_, Message>
     for (nivel, confirmado, pendiente, sin_publicar, fallido) in &resumen.cobertura {
         tabla = tabla.push(
             row![
-                // El nivel va con su propio color, el mismo que lleva la marca
-                // de cada dia en la lista de abajo: asi se reconoce sin leer.
-                text(nivel.clone())
-                    .size(13)
-                    .color(estilo::color_nivel(nivel))
-                    .width(Length::Fixed(ANCHO_NIVEL)),
-                celda(*confirmado, estilo::CONFIRMADO),
-                celda(*pendiente, estilo::PENDIENTE),
-                celda(*sin_publicar, estilo::SIN_PUBLICAR),
-                celda(*fallido, estilo::FALLIDO),
+                text(nivel.clone()).size(13).width(Length::Fixed(ANCHO_NIVEL)),
+                celda(*confirmado, false),
+                celda(*pendiente, false),
+                celda(*sin_publicar, false),
+                // La unica columna que puede pedir accion.
+                celda(*fallido, true),
             ]
             .align_y(iced::Alignment::Center),
         );
@@ -179,15 +175,25 @@ fn celda_cabecera<'a>(etiqueta: &'a str) -> Element<'a, Message> {
         .into()
 }
 
-fn celda<'a>(valor: i64, color: iced::Color) -> Element<'a, Message> {
-    // Un cero se apaga siempre. Una columna que resalta aunque no haya nada que
-    // mirar deja de avisar de nada.
-    let color = if valor == 0 { estilo::TENUE } else { color };
-    estilo::mono(valor.to_string())
-        .color(color)
+fn celda<'a>(valor: i64, alerta: bool) -> Element<'a, Message> {
+    // Un cero se atenua siempre, tambien en la columna de alerta: una columna
+    // que resalta aunque no haya nada que mirar deja de avisar de nada, y esta
+    // pantalla existe justamente para avisar.
+    let destacar = alerta && valor > 0;
+    let celda = estilo::mono(valor.to_string())
         .width(Length::Fixed(ANCHO_CIFRA))
-        .align_x(iced::alignment::Horizontal::Right)
-        .into()
+        .align_x(iced::alignment::Horizontal::Right);
+    if destacar {
+        celda.color(estilo::ALERTA).into()
+    } else if valor == 0 {
+        celda
+            .style(|theme: &iced::Theme| text::Style {
+                color: Some(estilo::tenue_color(theme)),
+            })
+            .into()
+    } else {
+        celda.into()
+    }
 }
 
 fn averias(averias: &[Averia]) -> Element<'_, Message> {
@@ -199,7 +205,7 @@ fn averias(averias: &[Averia]) -> Element<'_, Message> {
         averias.len()
     ))
     .size(14)
-    .color(estilo::FALLIDO)]
+    .color(estilo::ALERTA)]
     .spacing(3);
     for a in averias {
         bloque = bloque.push(
@@ -220,11 +226,12 @@ fn selector(state: &CalendarioState) -> Element<'_, Message> {
     let mut municipios = row![].spacing(6);
     for m in &state.municipios {
         let elegido = state.seleccion.as_deref() == Some(m.id.as_str());
-        let boton = button(text(m.nombre.as_str()).size(12)).style(if elegido {
-            button::primary
-        } else {
-            button::secondary
-        });
+        // Mismo lenguaje que la barra de navegacion y con el color de esta
+        // seccion: dos formas distintas de decir «esto esta seleccionado» en la
+        // misma pantalla obligan a aprender dos cosas en vez de una.
+        let boton = button(text(m.nombre.as_str()).size(12))
+            .padding([4, 10])
+            .style(estilo::pestana(estilo::SECCION_CALENDARIO, elegido));
         municipios = municipios.push(if elegido {
             boton
         } else {
@@ -235,11 +242,9 @@ fn selector(state: &CalendarioState) -> Element<'_, Message> {
     let mut computos = row![].spacing(6);
     for (i, c) in crate::calendario::COMPUTOS.iter().enumerate() {
         let elegido = i == state.computo;
-        let boton = button(text(*c).size(12)).style(if elegido {
-            button::primary
-        } else {
-            button::secondary
-        });
+        let boton = button(text(*c).size(12))
+            .padding([4, 10])
+            .style(estilo::pestana(estilo::SECCION_CALENDARIO, elegido));
         computos = computos.push(if elegido {
             boton
         } else {
@@ -265,21 +270,21 @@ fn detalle(state: &CalendarioState) -> Element<'_, Message> {
     // FIRME o PROVISIONAL es lo primero que hay que ver: es lo que decide si un
     // plazo calculado sobre este sitio puede darse por bueno.
     let mut veredicto = row![].spacing(6).align_y(iced::Alignment::Center);
+    // FIRME no se colorea: que algo este bien no necesita llamar la atencion.
+    // Lo que se marca es que una laguna venga de una averia, porque eso si pide
+    // que alguien haga algo hoy.
     if state.lagunas.is_empty() {
-        veredicto = veredicto.push(text("FIRME").size(13).color(estilo::CONFIRMADO));
+        veredicto = veredicto.push(text("FIRME").size(13));
     } else {
-        veredicto = veredicto.push(text("PROVISIONAL").size(13).color(estilo::SIN_PUBLICAR));
+        veredicto = veredicto.push(text("PROVISIONAL").size(13));
         veredicto = veredicto.push(estilo::tenue("le falta"));
-        // Cada laguna con el color de SU estado: no es lo mismo que falte algo
-        // que nadie ha leido todavia (gris) que algo que se intento y revento
-        // (rojo). Fundirlas en un texto plano perderia esa diferencia, que es
-        // precisamente la que dice si hay que hacer algo.
         for l in &state.lagunas {
-            veredicto = veredicto.push(
-                estilo::mono(format!("{} ({})", l.ambito, l.estado))
-                    .size(12)
-                    .color(estilo::color_estado(&l.estado)),
-            );
+            let etiqueta = estilo::mono(format!("{} ({})", l.ambito, l.estado)).size(12);
+            veredicto = veredicto.push(if l.estado == "fallido" {
+                etiqueta.color(estilo::ALERTA)
+            } else {
+                etiqueta
+            });
         }
     }
 
@@ -301,15 +306,16 @@ fn detalle(state: &CalendarioState) -> Element<'_, Message> {
         lista = lista.push(
             row![
                 estilo::mono(d.fecha.clone()).width(Length::Fixed(100.0)),
-                // La marca dice de que nivel viene el dia, que es la pregunta
-                // que surge al ver un festivo inesperado; lleva el mismo color
-                // que ese nivel en la tabla de arriba.
-                text(estilo::marca_nivel(&d.tipo))
-                    .size(13)
-                    .color(estilo::color_nivel(&d.tipo))
+                // La marca dice de que nivel viene el dia -- N nacional, A
+                // autonomico, I insular, L local --, que es la pregunta que
+                // surge al ver un festivo inesperado. Va en letra, no en color:
+                // una lista de doce dias con cuatro colores se lee peor.
+                estilo::mono(estilo::marca_nivel(&d.tipo).to_string())
                     .width(Length::Fixed(18.0)),
                 estilo::mono(d.ambito.clone())
-                    .color(estilo::TENUE)
+                    .style(|theme: &iced::Theme| text::Style {
+                        color: Some(estilo::tenue_color(theme)),
+                    })
                     .width(Length::Fixed(80.0)),
                 text(d.nombre.clone().unwrap_or_default()).size(13),
             ]

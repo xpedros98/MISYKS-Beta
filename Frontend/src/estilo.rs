@@ -1,58 +1,45 @@
 // Paleta y piezas visuales compartidas.
 //
-// Vive aparte para que el color signifique siempre lo mismo en toda la app: si
-// `pendiente` es gris en una pantalla y ambar en otra, el color deja de
-// informar y pasa a decorar. Aqui solo hay constantes y envoltorios pequenos;
-// ninguna pantalla define su propio color.
+// Dos reglas, aprendidas a base de hacerlo mal:
 //
-// El criterio de la paleta no es estetico sino de urgencia: lo que va bien se
-// apaga, lo que pide accion resalta. Por eso `confirmado` es verde sobrio y
-// `fallido` es rojo, mientras que `pendiente` --que es trabajo previsto, no una
-// averia-- se queda en gris y no compite por la atencion.
-use iced::widget::{container, text, Container, Text};
-use iced::{Color, Font};
+// **El texto no lleva color fijo.** La primera version clavaba un gris oscuro
+// para los titulos, que sobre el fondo claro quedaba deslavado y sobre uno
+// oscuro seria invisible. Los textos toman el color del tema (`palette.text`) y
+// solo se apagan por *opacidad*, no cambiando de gris: asi siguen legibles
+// aunque el tema cambie.
+//
+// **El color se reserva.** Si todo tiene color, nada destaca. El unico sitio
+// donde el color identifica algo es la barra de navegacion --cada seccion tiene
+// el suyo, para saber donde estas de un vistazo-- y el unico acento dentro de
+// una pantalla es lo que pide accion. Las tablas van en un solo color.
+use iced::widget::{button, container, text, Container, Text};
+use iced::{Background, Border, Color, Font, Theme};
 
 const fn rgb(r: u8, g: u8, b: u8) -> Color {
     Color::from_rgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
 }
 
-// --- estados de cobertura ---
-pub const CONFIRMADO: Color = rgb(56, 142, 60);
-pub const PENDIENTE: Color = rgb(130, 130, 130);
-pub const SIN_PUBLICAR: Color = rgb(25, 118, 210);
-pub const FALLIDO: Color = rgb(198, 40, 40);
+/// Color de cada seccion. Es lo unico que identifica por color en toda la app.
+pub const SECCION_INICIO: Color = rgb(58, 110, 165);
+pub const SECCION_SECRETARIO: Color = rgb(20, 130, 130);
+pub const SECCION_CALENDARIO: Color = rgb(126, 74, 160);
+pub const SECCION_AJUSTES: Color = rgb(120, 120, 130);
 
-// --- niveles de ambito ---
-// Distintos entre si y distintos de los de estado: un nivel no es un estado, y
-// compartir color haria pensar que si.
-pub const NACIONAL: Color = rgb(120, 60, 160);
-pub const AUTONOMICO: Color = rgb(0, 131, 143);
-pub const INSULAR: Color = rgb(191, 120, 0);
-pub const LOCAL: Color = rgb(194, 60, 120);
+/// Lo unico que pide accion dentro de una pantalla.
+pub const ALERTA: Color = rgb(198, 40, 40);
 
-// --- texto ---
-pub const TENUE: Color = rgb(120, 120, 120);
-pub const TITULO: Color = rgb(40, 40, 40);
-
-pub fn color_estado(estado: &str) -> Color {
-    match estado {
-        "confirmado" => CONFIRMADO,
-        "sin_publicar" => SIN_PUBLICAR,
-        "fallido" => FALLIDO,
-        _ => PENDIENTE,
-    }
+/// Texto del tema, atenuado. Se apaga bajando la opacidad en vez de elegir un
+/// gris: un gris fijo deja de funcionar en cuanto cambia el fondo.
+pub fn tenue_color(theme: &Theme) -> Color {
+    let mut c = theme.palette().text;
+    c.a = 0.55;
+    c
 }
 
-pub fn color_nivel(nivel: &str) -> Color {
-    match nivel {
-        "nacional" => NACIONAL,
-        "autonomico" => AUTONOMICO,
-        "insular" => INSULAR,
-        _ => LOCAL,
-    }
-}
-
-/// Letra que marca el nivel en una lista de dias: N, A, I o L.
+/// Letra que marca el nivel de un dia en una lista: N, A, I o L.
+///
+/// En letra y no en color a proposito: una lista corta con cuatro colores se
+/// lee peor que con cuatro iniciales.
 pub fn marca_nivel(nivel: &str) -> &'static str {
     match nivel {
         "nacional" => "N",
@@ -69,22 +56,77 @@ pub fn mono<'a>(contenido: String) -> Text<'a> {
 }
 
 pub fn titulo<'a>(contenido: impl Into<String>) -> Text<'a> {
-    text(contenido.into()).size(16).color(TITULO)
+    text(contenido.into()).size(16)
 }
 
 pub fn tenue<'a>(contenido: impl Into<String>) -> Text<'a> {
-    text(contenido.into()).size(11).color(TENUE)
+    text(contenido.into()).size(11).style(|theme: &Theme| text::Style {
+        color: Some(tenue_color(theme)),
+    })
 }
 
-/// Caja con fondo tenue y algo de aire, para separar bloques sin dibujar lineas.
+/// Caja con un borde discreto, para separar bloques sin dibujar lineas.
+///
+/// El fondo sale del tema, no de un gris fijo: sobre tema oscuro, un `#f6f6f8`
+/// clavado a mano seria una mancha blanca.
 pub fn tarjeta<'a, M: 'a>(contenido: impl Into<iced::Element<'a, M>>) -> Container<'a, M> {
-    container(contenido).padding(12).style(|_theme| container::Style {
-        background: Some(rgb(246, 246, 248).into()),
-        border: iced::Border {
-            color: rgb(222, 222, 228),
-            width: 1.0,
-            radius: 6.0.into(),
-        },
-        ..container::Style::default()
+    container(contenido).padding(12).style(|theme: &Theme| {
+        let paleta = theme.extended_palette();
+        container::Style {
+            background: Some(Background::Color(paleta.background.weak.color)),
+            border: Border {
+                color: paleta.background.strong.color,
+                width: 1.0,
+                radius: 6.0.into(),
+            },
+            ..container::Style::default()
+        }
     })
+}
+
+/// La barra que aloja las pestanas.
+pub fn barra<'a, M: 'a>(contenido: impl Into<iced::Element<'a, M>>) -> Container<'a, M> {
+    container(contenido).padding([6, 8]).style(|theme: &Theme| {
+        let paleta = theme.extended_palette();
+        container::Style {
+            background: Some(Background::Color(paleta.background.weak.color)),
+            border: Border {
+                color: paleta.background.strong.color,
+                width: 1.0,
+                radius: 8.0.into(),
+            },
+            ..container::Style::default()
+        }
+    })
+}
+
+/// Estilo de una pestana de la barra de navegacion.
+///
+/// Activa: rellena con el color de su seccion. Inactiva: transparente, con el
+/// texto del tema, y al pasar el raton se insinua con el mismo color a baja
+/// opacidad -- para que se vea que es pulsable antes de pulsarla.
+pub fn pestana(color: Color, activa: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |theme: &Theme, status: button::Status| {
+        let texto = theme.palette().text;
+        if activa {
+            return button::Style {
+                background: Some(Background::Color(color)),
+                text_color: Color::WHITE,
+                border: Border { radius: 6.0.into(), ..Border::default() },
+                ..button::Style::default()
+            };
+        }
+        let fondo = match status {
+            button::Status::Hovered | button::Status::Pressed => {
+                Some(Background::Color(Color { a: 0.15, ..color }))
+            }
+            _ => None,
+        };
+        button::Style {
+            background: fondo,
+            text_color: texto,
+            border: Border { radius: 6.0.into(), ..Border::default() },
+            ..button::Style::default()
+        }
+    }
 }
