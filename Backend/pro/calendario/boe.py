@@ -106,9 +106,9 @@ def localizar(anio, computo, registro=None, hoy=None):
     """Busca en los sumarios del BOE la resolución de ese año y cómputo.
 
     Devuelve `{'id', 'url_xml', 'publicado'}` o None si no aparece. Que
-    devuelva None no es un error: en septiembre, la resolución del año
-    siguiente puede no estar publicada todavía, y esa es la diferencia entre
-    `sin_publicar` y `pendiente` en la cobertura.
+    devuelva None **no es un fallo**: en septiembre, la resolución del año
+    siguiente puede no estar publicada todavía. Por eso el recolector lo anota
+    como `sin_publicar` y no como `fallido`: no hay nada que arreglar.
 
     `hoy` existe para poder probar el corte del rastreo sin depender de la
     fecha real de la máquina.

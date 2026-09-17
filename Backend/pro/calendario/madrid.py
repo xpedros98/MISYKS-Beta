@@ -96,7 +96,7 @@ def locales(crudo, anio):
     # Sin ninguna fila de ese año, el fichero simplemente no lo cubre todavía:
     # el calendario municipal del año siguiente se aprueba en otoño. Eso no es
     # una avería, es «aún no toca», y hay que decirlo así -- si se tratara como
-    # error, la cobertura quedaría `pendiente` y alguien se pondría a buscar un
+    # error, la cobertura quedaría `fallido` y alguien se pondría a buscar un
     # problema que no existe.
     if del_anio == 0:
         raise SinPublicar(f"El fichero de datos.madrid.es todavía no cubre {anio}.")

@@ -1,17 +1,15 @@
 // Paleta y piezas visuales compartidas.
 //
-// Dos reglas, aprendidas a base de hacerlo mal:
+// Dos reglas:
 //
-// **El texto no lleva color fijo.** La primera version clavaba un gris oscuro
-// para los titulos, que sobre el fondo claro quedaba deslavado y sobre uno
-// oscuro seria invisible. Los textos toman el color del tema (`palette.text`) y
-// solo se apagan por *opacidad*, no cambiando de gris: asi siguen legibles
-// aunque el tema cambie.
+// **El texto no lleva color fijo.** Sale del tema (`palette.text`), y lo que se
+// quiere atenuar baja la opacidad en vez de cambiar a otro gris. Un gris fijo
+// deja de funcionar en cuanto cambia el fondo: deslavado sobre claro,
+// invisible sobre oscuro.
 //
-// **El color se reserva.** Si todo tiene color, nada destaca. El unico sitio
-// donde el color identifica algo es la barra de navegacion --cada seccion tiene
-// el suyo, para saber donde estas de un vistazo-- y el unico acento dentro de
-// una pantalla es lo que pide accion. Las tablas van en un solo color.
+// **El color se reserva.** Si todo tiene color, nada destaca. Solo identifica
+// en la barra de navegacion, donde cada seccion tiene el suyo; dentro de una
+// pantalla, el unico acento es lo que pide accion.
 use iced::widget::{button, container, text, Container, Text};
 use iced::{Background, Border, Color, Font, Theme};
 
@@ -66,9 +64,7 @@ pub fn tenue<'a>(contenido: impl Into<String>) -> Text<'a> {
 }
 
 /// Caja con un borde discreto, para separar bloques sin dibujar lineas.
-///
-/// El fondo sale del tema, no de un gris fijo: sobre tema oscuro, un `#f6f6f8`
-/// clavado a mano seria una mancha blanca.
+/// El fondo sale del tema; un gris fijo seria una mancha sobre tema oscuro.
 pub fn tarjeta<'a, M: 'a>(contenido: impl Into<iced::Element<'a, M>>) -> Container<'a, M> {
     container(contenido).padding(12).style(|theme: &Theme| {
         let paleta = theme.extended_palette();

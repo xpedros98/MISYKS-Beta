@@ -6,12 +6,10 @@
 // describe AGENTES.md -- que el calendario envejezca en silencio -- poniendo
 // delante de alguien del equipo lo que falta y lo que se ha roto.
 //
-// La tabla va **en un solo color**. Una version anterior pintaba cada estado y
-// cada nivel del suyo, y el resultado era que no destacaba nada: con cinco
-// colores compitiendo, el ojo no sabe donde mirar. El unico acento es lo que
-// pide accion --una averia, o una cifra distinta de cero en FALLIDO--, y lo que
-// esta bien se atenua en vez de colorearse. El color que identifica cosas vive
-// en la barra de navegacion, no aqui.
+// La tabla va en un solo color: con varios compitiendo, el ojo no sabe donde
+// mirar y no destaca ninguno. El unico acento es lo que pide accion -- una
+// averia, o una cifra distinta de cero en FALLIDO --; lo que esta bien se
+// atenua. El color que identifica vive en la barra de navegacion, no aqui.
 use iced::widget::{button, column, container, row, scrollable, text, Space};
 use iced::{Element, Length};
 

@@ -15,9 +15,9 @@ aparte del motor por tres razones que no son de estilo:
   en Aragón dejaría al despacho sin poder calcular ningún plazo.
 
 **La regla que ordena todo esto: un fallo nunca se traga.** Si no se consigue
-leer una publicación, su cobertura queda `pendiente` y se sigue con la
-siguiente. Lo que no puede pasar es que un boletín ilegible deje huecos que el
-motor confunda con días hábiles, porque entonces el error aparece semanas
+leer una publicación, su cobertura queda `fallido` con el motivo y se sigue con
+la siguiente. Lo que no puede pasar es que un boletín ilegible deje huecos que
+el motor confunda con días hábiles, porque entonces el error aparece semanas
 después en forma de plazo perdido y sin nada que lo explique.
 """
 import hashlib

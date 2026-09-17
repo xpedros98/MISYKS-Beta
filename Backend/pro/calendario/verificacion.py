@@ -22,7 +22,7 @@ Las cinco comprobaciones, y qué error caza cada una:
 1. **El día aparece en la cita.** Caza el número cambiado --leer 14 donde pone
    15--, que es el error más probable y el más invisible.
 2. **El mes de la cita coincide con el de la fecha.** Caza haberse ido de fila
-   o de columna en una tabla por meses, que ya nos pasó con el BOE.
+   o de columna en una tabla por meses.
 3. **El día de la semana cuadra.** Casi todos los boletines lo dicen. Es la
    comprobación más barata y la más potente: una fecha mal transcrita casi
    nunca cae en el día de la semana correcto.

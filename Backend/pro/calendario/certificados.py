@@ -20,8 +20,8 @@ sub-agente entero se apoya en que lo sea.
 las raíces que el despacho haya puesto en `~/.misyks/ca/*.pem`. Añadir una raíz
 concreta y comprobable es muy distinto de aceptar cualquiera: sigue habiendo
 verificación, y sigue fallando si alguien se interpone. Si falta la raíz, la
-descarga falla, el recolector lo anota y la cobertura queda `pendiente` -- el
-sistema da fecha prudente en vez de datos de origen dudoso.
+descarga falla, la cobertura queda `fallido` con el motivo y el sistema da
+fecha prudente en vez de datos de origen dudoso.
 
 Las raíces se descargan de la sede de cada autoridad y se comprueba su huella
 antes de dejarlas aquí; eso es trabajo de instalación, no del programa, y está

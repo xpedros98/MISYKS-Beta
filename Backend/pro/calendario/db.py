@@ -70,8 +70,8 @@ class SinPublicar(Exception):
 
     No es un fallo y por eso tiene tipo propio: los festivos del año siguiente
     se aprueban en otoño, así que pedirlos en septiembre es normal. Tratarlo
-    como avería dejaría la cobertura en `pendiente` y alguien se pondría a
-    buscar un problema inexistente; el estado correcto es `sin_publicar`.
+    como avería dejaría la cobertura en `fallido` y alguien se pondría a buscar
+    un problema inexistente; el estado correcto es `sin_publicar`.
     """
 
 
