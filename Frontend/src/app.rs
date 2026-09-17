@@ -1,6 +1,7 @@
 use iced::widget::{button, column, row};
 use iced::Element;
 
+use crate::screens::calendario::CalendarioState;
 use crate::screens::settings::SettingsState;
 use crate::screens::{self, Screen};
 use crate::secretario::{self, EmailSummary, SecMailError};
@@ -14,6 +15,7 @@ const LIMITE_LISTA: i64 = -1;
 
 pub struct State {
     current_screen: Screen,
+    calendario: CalendarioState,
     secretario_emails: Result<Vec<EmailSummary>, SecMailError>,
     secretario_sync: Option<Result<String, SecMailError>>,
     settings: SettingsState,
@@ -28,6 +30,7 @@ impl Default for State {
             // async todavia.
             secretario_emails: secretario::list_emails(LIMITE_LISTA),
             secretario_sync: None,
+            calendario: CalendarioState::cargar(),
             settings: SettingsState::cargar(),
         }
     }
@@ -39,6 +42,8 @@ pub enum Message {
     ConectarCuenta(String),
     DesconectarCuenta(String),
     RefrescarSecretario,
+    CalendarioAmbito(String),
+    CalendarioComputo(usize),
 }
 
 pub fn update(state: &mut State, message: Message) {
@@ -57,6 +62,8 @@ pub fn update(state: &mut State, message: Message) {
         }
         Message::DesconectarCuenta(proveedor) => state.settings.desconectar(&proveedor),
         Message::RefrescarSecretario => sincronizar_y_recargar(state),
+        Message::CalendarioAmbito(ambito) => state.calendario.seleccionar(ambito),
+        Message::CalendarioComputo(computo) => state.calendario.cambiar_computo(computo),
     }
 }
 
@@ -69,6 +76,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
     let nav = row![
         nav_button(Screen::Home, state.current_screen),
         nav_button(Screen::Secretario, state.current_screen),
+        nav_button(Screen::Calendario, state.current_screen),
         nav_button(Screen::Ajustes, state.current_screen),
     ]
     .spacing(10);
@@ -78,6 +86,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
         Screen::Secretario => {
             screens::secretario::view(&state.secretario_emails, &state.secretario_sync)
         }
+        Screen::Calendario => screens::calendario::view(&state.calendario),
         Screen::Ajustes => screens::settings::view(&state.settings),
     };
 

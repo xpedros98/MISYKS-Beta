@@ -822,6 +822,23 @@ acciones`.
 El Backend sigue sin más dependencia que `sqlcipher3`: el flujo OAuth y las dos APIs
 van con la librería estándar (`urllib`, `http.server`).
 
+Frontend (`iced`): pantalla **Calendario** nueva (`src/calendario.rs` +
+`src/screens/calendario.rs`), que lee `calendario.db` en **solo lectura** y sin clave
+--no está cifrada-- y muestra la cobertura por nivel, las averías con su motivo y los
+días inhábiles de un municipio con la marca de qué nivel aporta cada uno. Es vista de
+mantenimiento, no del día a día: existe para que el calendario no envejezca en
+silencio. La cadena de ámbitos se resuelve con un **CTE recursivo** en SQL, así que el
+frontend no necesita saber cuántos niveles hay.
+
+Sobre el **acoplamiento de esquema**: `secretario.rs` y `calendario.rs` conocen el
+esquema de las bases que escribe el Backend, y nada ata las dos mitades. Mitigación en
+`calendario.rs`: `comprobar_esquema` verifica las columnas que usa y falla nombrando
+la que falte, en vez de devolver una lista vacía que parece un calendario sin
+festivos. Las consultas de Rust y Python se han contrastado sobre la base real --doce
+casos, mismos días y mismas lagunas-- pero eso es una comprobación puntual, no un
+mecanismo; si el acoplamiento crece, la alternativa es que el frontend pida los datos
+por la CLI.
+
 Frontend (`iced`): botón **Refrescar** en la pantalla Secretario invoca
 `sincronizar --limite 5` como subproceso y recarga la lista. Ajustes ya no tiene
 campos de texto sino **Conectar cuenta** por proveedor, con el estado de cada una;

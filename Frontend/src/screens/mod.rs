@@ -1,3 +1,4 @@
+pub mod calendario;
 pub mod home;
 pub mod secretario;
 pub mod settings;
@@ -7,6 +8,7 @@ pub enum Screen {
     #[default]
     Home,
     Secretario,
+    Calendario,
     Ajustes,
 }
 
@@ -15,6 +17,7 @@ impl Screen {
         match self {
             Screen::Home => "Inicio",
             Screen::Secretario => "Secretario",
+            Screen::Calendario => "Calendario",
             Screen::Ajustes => "Ajustes",
         }
     }
