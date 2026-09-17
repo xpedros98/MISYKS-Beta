@@ -53,9 +53,17 @@ se alimentará el motor. El proceso para añadir un municipio nuevo está en
 `RECOLECCION.md`, escrito para personas del equipo.
 
 En `estado`, la columna **FALLIDO** es la única que pide actuar: significa que se
-intentó leer una fuente y reventó. `sin leer` es que aún no hay extractor para
+intentó leer una fuente y reventó. `pendiente` es que aún no hay extractor para
 ella, y `sin publicar`, que el boletín no ha sacado ese año todavía. Los tres dan
 fecha prudente por igual; la distinción es para mantenimiento, no para el motor.
+
+`estado` cierra con dos datos que **no son lo mismo**: el último festivo guardado
+(dónde acaban las filas) y el horizonte firme por ámbito (hasta cuándo una fecha
+puede salir firme). Con 2026 confirmado entero son el 26 y el 31 de diciembre: los
+días sin festivo entre medias también son dato. Un ámbito solo cuenta como firme
+si toda su cadena lo está, así que Madrid sale firme en judicial y no en
+administrativo — sus fiestas locales las tenemos, el calendario administrativo de
+su comunidad no.
 
 **Dónde viven los datos.** Las dos bases están en `~/.misyks/`, fuera del repo:
 `sec_mail.db` (SQLCipher, con clave en `~/.misyks/config`) y `calendario.db`

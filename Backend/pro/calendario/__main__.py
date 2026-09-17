@@ -95,11 +95,17 @@ def _estado(cal):
     cuenta = {}
     for ambito, tipo, nombre, anio, computo, estado in cal.mapa_cobertura(anios):
         cuenta[(tipo, estado)] = cuenta.get((tipo, estado), 0) + 1
-    print(f"{'nivel':<12} {'confirmado':>11} {'sin leer':>9} {'sin publicar':>13} {'FALLIDO':>8}")
+    print(f"{'nivel':<12} {'confirmado':>11} {'pendiente':>10} {'sin publicar':>13} {'FALLIDO':>8}")
     for tipo in db.TIPOS_AMBITO:
         fila = [cuenta.get((tipo, e), 0) for e in db.COBERTURA]
         if any(fila):
-            print(f"{tipo:<12} {fila[0]:>11} {fila[1]:>9} {fila[2]:>13} {fila[3]:>8}")
+            print(f"{tipo:<12} {fila[0]:>11} {fila[1]:>10} {fila[2]:>13} {fila[3]:>8}")
+    # Las cabeceras son los nombres que guarda la tabla, para que la pantalla y
+    # la base hablen igual; lo que necesita explicacion va en la leyenda.
+    print()
+    print("  pendiente    = no se ha intentado: no hay extractor para esa fuente")
+    print("  sin publicar = se miró y el boletín aún no ha sacado ese año")
+    print("  FALLIDO      = se intentó y falló (lo único que pide actuar)")
 
     # Lo fallido se detalla siempre: es lo unico de esta pantalla que pide que
     # alguien haga algo. Lo demas es estado normal del trabajo pendiente.
@@ -110,7 +116,32 @@ def _estado(cal):
             print(f"  {ambito:10} {anio} {computo:15} {(detalle or '')[:70]}")
     else:
         print("\nNinguna fuente ha fallado.")
+
+    _horizontes(cal, anios)
     return 0
+
+
+def _horizontes(cal, anios):
+    """Hasta dónde llegan los datos, y hasta dónde se puede uno fiar.
+
+    Son dos cosas distintas y por eso van separadas. La última fecha anotada
+    solo dice dónde acaban las filas; el horizonte dice hasta cuándo una fecha
+    puede salir firme, que es lo que decide un plazo. Con 2026 confirmado
+    entero, el último festivo es el 26 de diciembre pero el horizonte llega al
+    31: el año está completo, y los días sin festivo también son dato.
+    """
+    print(f"\nÚltimo festivo guardado: {cal.ultimo_festivo() or 'ninguno'}")
+    print("Firme hasta — un ámbito sale aquí solo si toda su cadena está confirmada:")
+    por_fecha = {}
+    for fila in cal.conn.execute("SELECT id FROM ambitos ORDER BY id"):
+        for computo in db.COMPUTOS:
+            clave = (cal.horizonte(fila["id"], computo, desde=anios[0]), computo)
+            por_fecha.setdefault(clave, []).append(fila["id"])
+    for (fecha, computo), ambitos in sorted(
+        por_fecha.items(), key=lambda x: (x[0][0] is None, x[0][0] or "", x[0][1])
+    ):
+        muestra = ", ".join(ambitos[:5]) + ("..." if len(ambitos) > 5 else "")
+        print(f"  {fecha or 'nada firme':12} {computo:15} {len(ambitos):3} ámbitos  {muestra}")
 
 
 def _festivos(cal, ambito, anio):

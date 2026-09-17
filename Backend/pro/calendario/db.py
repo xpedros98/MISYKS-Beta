@@ -472,6 +472,46 @@ class Calendario:
             for computo in COMPUTOS
         ]
 
+    def ultimo_festivo(self, computo=None, version=None):
+        """La fecha más lejana que hay anotada. Dato crudo, no garantía.
+
+        Responde «¿hasta dónde llegan los datos que tengo?», que no es lo
+        mismo que «¿hasta cuándo puedo fiarme?»: ver `horizonte`.
+        """
+        version = self._version(version)
+        parametros = {"version": version, "c": computo}
+        filtro = "" if computo is None else " AND f.computo = :c"
+        fila = self.conn.execute(
+            f"SELECT max(f.fecha) AS f FROM festivos f"
+            f" WHERE {_VIGENTE.format(t='f')}{filtro}",
+            parametros,
+        ).fetchone()
+        return fila["f"]
+
+    def horizonte(self, ambito_id, computo, desde=None, version=None):
+        """Hasta qué fecha se puede dar una respuesta firme para ese sitio.
+
+        Es lo que de verdad hay que mirar, y no coincide con la última fecha
+        anotada. Un año confirmado entero vale hasta su 31 de diciembre aunque
+        su último festivo sea el 26; y un año leído a medias no vale hasta su
+        último festivo, no vale en absoluto.
+
+        Cuenta años **consecutivos** desde `desde` (por defecto, el año en
+        curso): un hueco corta el horizonte ahí, porque a partir de ese hueco
+        cualquier plazo sale provisional. Devuelve None si ni siquiera el año
+        en curso está confirmado.
+        """
+        _comprueba_computo(computo)
+        version = self._version(version)
+        anio = desde or date.today().year
+        ultimo = None
+        while self._cobertura(ambito_id, anio, computo, version) == "confirmado":
+            if self.lagunas(ambito_id, computo, [anio], version):
+                break  # el ámbito está confirmado pero algo de su cadena no
+            ultimo = anio
+            anio += 1
+        return f"{ultimo}-12-31" if ultimo else None
+
     def averias(self, anios, version=None):
         """Lo que se intento leer y salio mal: [(ambito, anio, computo, detalle)].
 
