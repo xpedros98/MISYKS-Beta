@@ -259,10 +259,71 @@ la **corrección**, antes de usarlo con clientes (validación, abajo), y la
   administrativo; da una fecha posterior a la real cuando le falta un dato; da una
   fecha que no sabe explicar; se usa con clientes sin haber superado la validación.
 - **Necesita:**
-  - Calendario oficial de festivos por municipio, **fiable y al día**. Se da por
-    resuelto: mantenerlo no es tarea de este sub-agente (ver nota siguiente).
+  - Calendario oficial de festivos por municipio, **fiable y al día**. Mantenerlo no
+    es tarea de este sub-agente: lo llena el **recolector** (ver nota siguiente).
   - `municipio_organo`, de `pro.destino`; en cómputo administrativo, además, el
     municipio de residencia del interesado, de la ficha del cliente.
+
+**`pro.calendario/recolector`** — quien llena el calendario
+El hueco que la línea anterior daba por resuelto. No calcula nada: va a los boletines
+oficiales, lee las publicaciones y escribe los festivos que el motor consume.
+
+- **Contrato:** `{anios[]}` → `{version, anotados, retirados, confirmados[], fallos[]}`
+- **Reglas:**
+  - **Solo escribe; el motor solo lee.** Es lo que permite validar el motor contra
+    datos fijos, y lo que evita que un boletín caído deje al despacho sin calcular.
+  - **Un fallo nunca se traga.** Si no consigue leer una publicación, deja su
+    cobertura en `pendiente` y sigue con la siguiente. Un hueco silencioso se
+    confundiría con días hábiles y aparecería semanas después como un plazo perdido.
+  - **Distingue `pendiente` de `sin_publicar`.** Lo primero hay que arreglarlo; lo
+    segundo es normal —las locales salen entre agosto y diciembre del año anterior—.
+    Los dos dan fecha prudente, pero solo uno pide intervención.
+  - **No es de una sola pasada**, aunque lo parezca: las correcciones a mitad de año
+    obligan a repetirla, y por eso guarda la huella de cada documento leído.
+  - Es un **agente de software**, sin LLM. Solo lee dato público, así que puede correr
+    en el servidor y replicarse.
+- **Falla si:** deja un hueco sin marcar; borra un festivo en vez de retirarlo;
+  aborta la pasada entera porque una fuente falló; confunde los dos cómputos.
+- **Necesita:** acceso de red a los boletines. Nada más: ni credenciales ni datos de
+  expedientes.
+
+**Establecer y actualizar son dos trabajos, no uno.** *Establecer* los festivos que hoy
+están publicados se hace una vez; *actualizar* —enterarse de que una comunidad ha
+rectificado en febrero— es lo que de verdad tiene que correr solo. Automatizar lo
+primero cuesta más que hacerlo, así que el establecimiento de lo que no tiene extractor
+lo hace **una persona**, y el actualizador queda pendiente de diseño.
+
+Que lo lea una persona no relaja nada, porque la garantía no está en quién lee sino en
+lo que se exige de cada dato:
+
+- **Sin cita literal del boletín, un festivo no entra.** Se copia el trozo de texto del
+  que sale la fecha, en el idioma original y sin traducir: traducir ya es interpretar,
+  y la interpretación es justo lo que se está comprobando. Es la misma línea que se
+  trazó con `inv.normativa`: quien lee decide **dónde mirar**, pero el valor lo produce
+  y lo comprueba el código.
+- **Cinco comprobaciones deterministas**, sin modelo, antes de escribir: el día aparece
+  en la cita; el mes que la cita nombra coincide con la fecha; el día de la semana
+  cuadra, si el boletín lo dice; como mucho dos fiestas locales por municipio y año; y
+  ninguna cae en un festivo autonómico o nacional —si coincide, se ha leído mal la
+  columna—.
+- **Un ámbito con una entrada rechazada no se confirma entero.** Lo que se sabe de él
+  está incompleto, así que sigue dando fecha prudente. Media verdad no es mejor que
+  ninguna cuando de ahí sale un plazo.
+- **El dato establecido vive en el repositorio**, con su URL y su cita al lado, no en
+  el resultado de una llamada a un modelo. Así cualquiera del despacho puede
+  contrastarlo, y no depende de que una API siga respondiendo igual dentro de dos años.
+- **Se descartó usar un modelo externo** para esta fase. No por calidad: por coste —
+  sería gasto nuevo del despacho— y porque lo que aportaría se consigue igual
+  escribiendo el dato una vez. La decisión se reabrirá al diseñar el actualizador.
+
+El procedimiento, escrito para las personas del equipo, está en `RECOLECCION.md`.
+
+**Ninguna fuente se lee sin verificar el certificado.** Varias administraciones emiten
+con autoridades del sector público español que no vienen en los almacenes de confianza
+habituales (IZENPE, Firmaprofesional). La salida es añadir esa raíz concreta y
+comprobada, nunca desactivar la comprobación: quien pudiera interponerse elegiría qué
+días son inhábiles, y no daría error sino una fecha equivocada con aspecto de correcta.
+Si una fuente no se puede leer, su cobertura queda `pendiente` y ya está.
 
 *Origen del calendario.* No existe una fuente única de festivos por municipio. Se forma
 en tres capas: las **nacionales**, las **autonómicas**, que fija cada comunidad, y hasta
@@ -275,6 +336,17 @@ Canarias añade fiestas insulares. En total, unas 29 publicaciones distintas sol
 las locales, que a menudo se corrigen con el año ya empezado (en 2026, Andalucía en
 febrero y abril; Aragón, en marzo). Por eso no basta con refrescar el calendario una
 vez al año: si no se vigila, el sistema calcula mal **en silencio**.
+
+*Y son dos calendarios, no uno.* El judicial sale de la resolución anual de **fiestas
+laborales**: el art. 182 LOPJ no tiene lista propia, declara inhábiles los días de
+fiesta laboral en la comunidad o la localidad. El administrativo sale de la resolución
+de **días inhábiles de la AGE** y de los acuerdos equivalentes de cada comunidad. A
+nivel estatal y autonómico coinciden —el apartado segundo de la de la AGE remite a los
+mismos días, como manda el art. 30.7 de la Ley 39/2015—, pero **a nivel local no
+tienen por qué**: para el cómputo administrativo los días de un municipio son los que
+fije el calendario de su comunidad, no sus fiestas patronales. Por eso cada festivo se
+guarda con el cómputo al que sirve, y pedir días inhábiles sin decir cuál es un error,
+no un descuido con valor por defecto.
 
 **`pro.caducidad`** — plazos perentorios
 El que puede matar un caso.

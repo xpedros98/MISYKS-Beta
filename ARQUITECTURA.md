@@ -925,6 +925,108 @@ Del paso a OAuth:
   sustituir la identidad estable por `Message-ID` o UID y quitar la lectura de
   etiquetas.
 
+**Implementado a medias — `pro.calendario`: el calendario, no el motor**
+
+Segundo sub-agente con código. Está escrita **la fuente de datos** —el calendario de
+festivos y el recolector que lo llena desde los boletines— y **no el cómputo de
+plazos**, que es el agente propiamente dicho. Importar el paquete no permite calcular
+ninguna fecha todavía.
+
+| pieza | fichero |
+|---|---|
+| esquema y consultas del calendario | `pro/calendario/db.py` |
+| catálogo de ámbitos y de las 29 publicaciones | `pro/calendario/fuentes.py` |
+| extractor del BOE (las dos resoluciones estatales) | `pro/calendario/boe.py` |
+| extractor local de Madrid (datos abiertos) | `pro/calendario/madrid.py` |
+| confianza TLS y raíces del sector público | `pro/calendario/certificados.py` |
+| diagnóstico de fuentes que no se dejan leer | `pro/calendario/diagnostico.py` |
+| verificación de festivos antes de escribirlos | `pro/calendario/verificacion.py` |
+| carga de los festivos anotados a mano | `pro/calendario/semilla.py` |
+| datos establecidos, con su cita | `pro/calendario/datos/festivos_locales.json` |
+| recolector: recorre boletines y escribe | `pro/calendario/recolector.py` |
+| CLI | `pro/calendario/__main__.py` |
+
+Superficie: `recolectar [AÑO...] · semilla · comprobar URL [TEXTO] · estado · festivos ÁMBITO [AÑO] · calendario ÁMBITO [AÑO]`. El procedimiento para personas está en `RECOLECCION.md`. Tablas:
+`versiones · ambitos · fuentes · festivos · cobertura`. Sin dependencias nuevas: el
+Backend sigue con `sqlcipher3` como única externa, y esto va con `sqlite3`, `urllib`
+y `xml.etree` de la estándar.
+
+Decisiones que conviene no perder:
+
+- **Base sin cifrar, y en local igualmente.** Los festivos son dato público del BOE,
+  así que `calendario.db` va en SQLite a secas, sin la clave que sí lleva
+  `sec_mail.db`. Pero vive en `~/.misyks` y no solo en el servidor: el motor que la
+  consume toca expedientes y corre en el PC del letrado, y una base solo remota
+  dejaría al despacho sin poder calcular plazos en cuanto se cayera la red.
+- **Los festivos se guardan dispersos.** Solo los días que lo son. Una fila por día y
+  municipio serían unos seis millones de filas, y sobre todo no sabrían distinguir
+  «no es festivo» de «no sé si lo es».
+- **`cobertura` responde aparte a «¿tengo el dato?».** Es una tabla por ámbito, año y
+  cómputo. Ausencia de fila cuenta como `pendiente`, nunca como `confirmado`: una
+  base vacía no sabe nada y tiene que comportarse como tal. Es lo que permitirá al
+  motor marcar `provisional` en vez de dar por hábil un día que no ha comprobado.
+- **Nada se borra: `alta` y `baja` por versión.** Las comunidades rectifican con el
+  año empezado. Toda consulta acepta una versión, así que el `version_calendario` que
+  el contrato del sub-agente devuelve basta para repetir un cálculo tal como se hizo.
+- **Los ámbitos son un árbol, no una tabla de municipios.** `08019 → ES-CT → ES`, con
+  un nivel insular intercalado donde existe (Canarias, Baleares). El motor recorre la
+  cadena sin saber cuántos niveles tiene.
+- **`computo` es una columna, no una etiqueta.** Judicial y administrativo son dos
+  calendarios con dos fuentes. `inhabiles()` exige decir cuál, sin valor por defecto,
+  para que no se mezclen por olvido.
+- **El calendario administrativo se deriva, no se extrae.** La resolución de días
+  inhábiles de la AGE no trae su anexo en el XML del BOE, solo en el PDF; pero su
+  apartado segundo remite a los festivos laborales, igual que el art. 30.7 de la Ley
+  39/2015. Se deriva de la rejilla laboral, que sí es legible. La primera versión
+  intentaba leer fechas de la prosa del documento y devolvía dieciocho días
+  inventados sin dar ningún error.
+- **TLS verificado siempre, con raíces del sector público añadidas.** Varias
+  administraciones emiten con CA propias (IZENPE en Euskadi, ACCV en la Comunitat
+  Valenciana) cuyas raíces no trae Python, y la descarga falla con un mensaje que
+  parece decir que el servidor está mal. El arreglo **no** es desactivar la
+  verificación: quien se interpusiera elegiría qué días son inhábiles, sin error ni
+  aviso. Se añaden las raíces concretas en `~/.misyks/ca/*.pem`
+  (`pro/calendario/certificados.py`); sin ellas, la fuente falla y queda `pendiente`.
+- **El establecimiento se hace a mano, y con prueba documental.** Los festivos locales
+  que no tienen extractor se anotan en un JSON versionado, cada entrada con la cita
+  literal del boletín, y `verificacion.py` los comprueba antes de escribirlos: día
+  presente en la cita, mes coherente, día de la semana correcto, tope de dos locales
+  por municipio y sin solape con niveles superiores. Nada entra sin cita. Automatizar
+  un trabajo que se hace una vez cuesta más que hacerlo; lo que no puede faltar es que
+  sea auditable, y por eso el dato vive en el repo con su URL al lado.
+- **Un municipio con una entrada rechazada no se confirma entero.** Lo que se sabe de
+  él está incompleto, así que sigue dando fecha provisional.
+- **El recolector va aparte del motor.** Corren en sitios y momentos distintos, y
+  sobre todo fallan distinto: si un boletín rediseña su web, el motor tiene que
+  seguir calculando con lo que haya. Un fallo del recolector nunca se traga: deja la
+  cobertura en `pendiente` y sigue con la siguiente fuente.
+
+Lo que falta, y no es poco:
+
+- **El motor de días.** Fines de semana, *dies a quo*, agosto, Navidad, cómputo por
+  meses, fecha prudente: nada de eso está escrito. El calendario no sabe de reglas
+  procesales a propósito.
+- **Los festivos locales, salvo Madrid.** Las 29 publicaciones están registradas como
+  fuentes, pero solo hay extractor para el BOE y para datos.madrid.es. Madrid es hoy
+  el único ámbito que puede dar fecha **firme** en cómputo judicial; los otros nueve
+  municipios constan `pendiente`. Para las nueve comunidades que cubren esos
+  municipios, la vía preferente son los **datos abiertos** (Euskadi, Madrid y Galicia
+  publican JSON o CSV) antes que rascar el HTML del boletín.
+- **Una fuente solo retira lo que ella publica.** `_sincronizar` exige un `alcance`
+  explícito. Sin él, el fichero de Madrid --dos fiestas locales-- habría retirado el
+  calendario nacional entero al no encontrar esos días en su lista, y en silencio,
+  porque retirar un festivo no es un error.
+- **De un fichero municipal se toman solo las filas de competencia municipal.** El de
+  Madrid trae el calendario completo de la ciudad y su clasificación no es fiable
+  fuera de lo suyo: en 2026 etiqueta el 3 de abril como «Jueves Santo» y da por
+  nacionales días que el BOE fija como autonómicos. En sus dos fiestas locales es la
+  fuente autorizada; en el resto, no.
+- **El calendario administrativo autonómico y local.** Sale del acuerdo propio de
+  cada comunidad, y para lo local el art. 30.6 obliga además a mirar el municipio del
+  interesado, no solo el del órgano.
+- **Diez municipios, no 8.131.** El árbol arranca con las diez ciudades más pobladas
+  como banco de pruebas; crecerá cuando `pro.destino` resuelva órganos nuevos.
+
 Los otros cinco de `secretario`: `sec.ocr`, `sec.clasificador`, `sec.agenda`,
 `sec.notificador`, `sec.entrega`. Después, grupo a grupo, según vaya funcionando cada
 uno.

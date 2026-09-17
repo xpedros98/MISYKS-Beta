@@ -37,6 +37,21 @@ python -m sec.mail mover ID CARPETA
 
 `conectar` necesita un `client_id` en `~/.misyks/config` (`INSTALACION.md`).
 
+```bash
+python -m pro.calendario recolectar [AÑO...]    # Lee los boletines y llena el calendario
+python -m pro.calendario semilla                # Carga los festivos locales anotados a mano
+python -m pro.calendario comprobar URL [TEXTO]  # Por qué no se puede leer una fuente
+python -m pro.calendario estado                 # Qué ámbitos están confirmados y cuáles no
+python -m pro.calendario festivos ÁMBITO [AÑO]  # Días inhábiles de un sitio, por cómputo
+python -m pro.calendario calendario ÁMBITO [AÑO] # El año entero en rejilla, para mirarlo a ojo
+```
+
+`recolectar` sin años usa la ventana deslizante (el año en curso y el siguiente) y
+necesita red: descarga del BOE. No pide credenciales, solo lee dato público. Ojo:
+`pro.calendario` **todavía no calcula plazos**, solo mantiene el calendario del que
+se alimentará el motor. El proceso para añadir un municipio nuevo está en
+`RECOLECCION.md`, escrito para personas del equipo.
+
 Frontend (desde `Frontend/`): `cargo run`, `cargo build`, `cargo clippy`.
 
 No hay suite de tests ni linter configurados todavía; no inventes órdenes de test.
