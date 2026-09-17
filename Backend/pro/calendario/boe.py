@@ -6,15 +6,10 @@ las diecinueve comunidades, que es el grueso de los días inhábiles. Solo las
 locales quedan fuera, y esas van boletín por boletín (ver `fuentes.py`).
 
 **Son dos resoluciones distintas, una por cómputo**, y confundirlas es uno de
-los «falla si» del catálogo:
-
-- *Judicial*: «relación de fiestas laborales», de la Dirección General de
-  Trabajo. El art. 182 LOPJ no tiene lista propia: declara inhábiles los días
-  de fiesta laboral en la comunidad o la localidad, así que esta resolución es
-  la fuente del calendario judicial pese a llamarse laboral.
-- *Administrativo*: «calendario de días inhábiles en el ámbito de la
-  Administración General del Estado», de la Secretaría de Estado de Función
-  Pública, publicada por separado y varias semanas después.
+los «falla si» del catálogo. El calendario *judicial* sale de la «relación de
+fiestas laborales» --el art. 182 LOPJ no tiene lista propia y remite a ellas,
+así que esa resolución vale pese a llamarse laboral--; el *administrativo*, del
+«calendario de días inhábiles de la AGE», publicado semanas después.
 
 **El descubrimiento va por la API de sumarios, no por el buscador.** El
 buscador del BOE rechaza las consultas GET que no vienen de su formulario, y

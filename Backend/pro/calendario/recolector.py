@@ -162,10 +162,8 @@ def _recolectar_boe(cal, anio, computo, version, resumen, registro, laborales):
     registro(f"BOE {anio} ({computo}): buscando la resolución...")
     hallazgo = boe.localizar(anio, computo)
     if hallazgo is None:
-        # No encontrarla no es un fallo si el año aún no ha llegado: las dos
-        # resoluciones salen en el último trimestre del año anterior. Esa
-        # diferencia es la que separa «hay que arreglar algo» de «todavía no
-        # toca», y las dos dan fecha prudente igualmente.
+        # Las dos resoluciones salen en el último trimestre del año anterior,
+        # así que no encontrarlas antes no es una avería (ver `db.COBERTURA`).
         estado = "sin_publicar"
         registro(f"  · sin publicar todavía")
         for ambito in _ambitos_que_cubre(computo):

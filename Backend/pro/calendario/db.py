@@ -1,37 +1,22 @@
 """Calendario de festivos: base de datos local, sin cifrar.
 
-A diferencia de `sec.mail`, aquí no hay nada confidencial. Los festivos son
-dato público publicado en boletines oficiales, así que la base va en SQLite a
-secas, sin SQLCipher y sin clave: cifrarla solo añadiría una dependencia y un
-secreto que gestionar a cambio de proteger algo que cualquiera puede leer en
-el BOE. La base *sí* vive en el mismo `~/.misyks` que el resto, porque
-`pro.calendario` corre en el ordenador del letrado (ARQUITECTURA.md §1, «Dónde
-corre cada agente»): el calendario podría vivir en el servidor, pero el motor
-que lo consume no, y sin réplica local un corte de red dejaría al despacho sin
-poder calcular ni un plazo.
+Sin SQLCipher y sin clave, a diferencia de `sec_mail.db`: los festivos son dato
+público del BOE. Vive igualmente en `~/.misyks` porque el motor que la consume
+toca expedientes y corre en el PC del letrado, y sin réplica local un corte de
+red dejaría al despacho sin calcular ni un plazo.
 
-Tres ideas sostienen el esquema:
+Tres ideas sostienen el esquema (razonadas en ARQUITECTURA.md §8.3):
 
-**Los festivos se guardan dispersos, no día a día.** Una fila por día y
-municipio serían unos seis millones de filas para decir «día normal» seis
-millones de veces. Guardando solo los días que son festivos son unas decenas
-de miles.
-
-**Saber que un día no es festivo no es lo mismo que no saberlo.** Ausencia de
-fila en `festivos` no significa «día hábil»: puede significar «los festivos
-locales de ese municipio para ese año todavía no se han publicado». Esa
-diferencia es la que decide si una fecha sale `firme` o `provisional`
-(AGENTES.md, `pro.calendario`), y por eso existe `cobertura`, que responde por
-separado a «¿tengo el dato?». Sin ella el sistema calcularía mal en silencio,
-que es exactamente el riesgo que el catálogo describe.
-
-**Las correcciones no borran.** Las comunidades rectifican sus festivos con el
-año ya empezado (en 2026, Andalucía en febrero y abril; Aragón, en marzo). Si
-una corrección sobrescribiera la fila, un plazo calculado en marzo dejaría de
-poder reproducirse. En vez de eso, cada fila lleva la versión de calendario en
-que nace (`alta`) y en la que deja de valer (`baja`), y toda consulta acepta
-una versión: así el `version_calendario` que `pro.calendario` devuelve en cada
-cálculo basta para repetirlo tal como se hizo.
+1. **Los festivos se guardan dispersos**, solo los días que lo son. Una fila por
+   día y municipio serían seis millones de filas para decir «día normal».
+2. **Ausencia de fila no significa día hábil**, sino que puede no saberse. Por
+   eso `cobertura` responde aparte a «¿tengo el dato?»: es lo que separa una
+   fecha firme de una provisional, y sin ella el sistema calcularía mal en
+   silencio.
+3. **Las correcciones no borran.** Cada fila nace en una versión (`alta`) y
+   muere en otra (`baja`), y toda consulta acepta una versión. Así el
+   `version_calendario` que devuelve cada cálculo basta para repetirlo tal como
+   se hizo, aunque el boletín se haya rectificado después.
 """
 import sqlite3
 from datetime import date, datetime, timezone

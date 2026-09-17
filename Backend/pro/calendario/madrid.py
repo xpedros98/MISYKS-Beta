@@ -17,11 +17,10 @@ es competencia del pleno del ayuntamiento --sus dos fiestas locales-- es la
 fuente autorizada; en el resto, no.
 
 **Cubre el cómputo judicial, no el administrativo.** El art. 182 LOPJ declara
-inhábiles las fiestas laborales de la localidad, así que estas dos fechas
-cuentan para los plazos judiciales. Para el administrativo, en cambio, los días
-inhábiles de un municipio son los que fije el calendario de su comunidad
-(apartado segundo, c, de la resolución de la AGE), que no tiene por qué
-coincidir. Ese dato sale del BOCM y aquí se deja como no sabido.
+inhábiles las fiestas laborales de la localidad. Para el administrativo, los
+días de un municipio son los que fije el calendario de su **comunidad**
+(apartado segundo, c, de la resolución de la AGE), que sale del BOCM y aquí se
+deja como no sabido.
 
 **No hay descubrimiento: la URL es estable.** A diferencia del BOE, donde cada
 año publica un documento distinto, aquí el mismo fichero cubre de 2013 en

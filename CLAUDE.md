@@ -46,43 +46,6 @@ python -m pro.calendario festivos ÁMBITO [AÑO]   # Días inhábiles de un siti
 python -m pro.calendario calendario ÁMBITO [AÑO] # El año en rejilla, para mirarlo a ojo
 ```
 
-`recolectar` sin años usa la ventana deslizante (el año en curso y el siguiente) y
-necesita red: descarga del BOE. No pide credenciales, solo lee dato público. Ojo:
-`pro.calendario` **todavía no calcula plazos**, solo mantiene el calendario del que
-se alimentará el motor. El proceso para añadir un municipio nuevo está en
-`RECOLECCION.md`, escrito para personas del equipo.
-
-En `estado`, la columna **FALLIDO** es la única que pide actuar: significa que se
-intentó leer una fuente y reventó. `pendiente` es que aún no hay extractor para
-ella, y `sin publicar`, que el boletín no ha sacado ese año todavía. Los tres dan
-fecha prudente por igual; la distinción es para mantenimiento, no para el motor.
-
-`estado` cierra con el **último festivo guardado**, que es dónde acaban las filas y
-**no** hasta cuándo se puede uno fiar. Con 2026 confirmado entero dice 26 de
-diciembre, y sin embargo el calendario sirve hasta el 31: los días sin festivo
-entre medias también son dato. Lo segundo es `db.horizonte(ámbito, cómputo)`, que
-no se lista en `estado` porque son 32 ámbitos por 2 cómputos; para un sitio
-concreto lo dicen `festivos` y `calendario`, que avisan de sus lagunas.
-
-Un ámbito solo llega a firme si **toda su cadena** lo está (`08019 → ES-CT → ES`):
-un eslabón sin confirmar la invalida entera, porque sin las fiestas locales no se
-puede afirmar que un día sea hábil. Por eso Madrid sale firme en judicial y no en
-administrativo — sus fiestas del ayuntamiento las tenemos, el calendario
-administrativo de su comunidad no.
-
-**Dónde viven los datos.** Las dos bases están en `~/.misyks/`, fuera del repo:
-`sec_mail.db` (SQLCipher, con clave en `~/.misyks/config`) y `calendario.db`
-(SQLite a secas, sin clave, porque los festivos son dato público). `recolectar`
-tarda un par de minutos y va escribiendo; para mirar la base **mientras corre**,
-hay que abrirla en solo lectura o se choca con el escritor:
-
-```bash
-python -c "import sqlite3,pathlib;p=pathlib.Path.home()/'.misyks/calendario.db';c=sqlite3.connect(f'file:{p.as_posix()}?mode=ro',uri=True);print(c.execute('SELECT count(*) FROM festivos').fetchone()[0],'festivos')"
-```
-
-En la consola de Windows, `python -X utf8 -m ...` evita que las tildes salgan
-como interrogantes; no cambia lo que se guarda, solo lo que se ve.
-
 Frontend (desde `Frontend/`): `cargo run`, `cargo build`, `cargo clippy`.
 
 No hay suite de tests ni linter configurados todavía; no inventes órdenes de test.
