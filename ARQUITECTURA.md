@@ -1,7 +1,7 @@
 # Arquitectura de agentes y tipos documentales
 
 > Modelo de organización del enrutado de MISYKS.
-> Última actualización: 2026-09-16
+> Última actualización: 2026-09-17
 
 **Naturaleza del documento.** Diseño completo del sistema de agentes. No se
 distingue entre lo implementado y lo pendiente salvo en §8.3, que recoge el estado
@@ -107,7 +107,14 @@ Convierte un documento en una posición dentro del despacho.
 **Valida al entrar, verifica antes de salir y posee los canales procesales.** Decide si hay tiempo, si faltan requisitos y a qué destino corresponde;
 el envío lo ejecuta el secretario. Determinista de punta a punta.
 
-**Contrato puerta:** `{tipoActo, fechaActo}` → `{fecha_limite, franja, bloqueo, requisitos_pendientes}`
+**Contrato puerta:** `{actos_candidatos[], notificacion, organo, expediente}` → `{plazos[], requisitos_pendientes[], bloqueo}`, y cada plazo `{fecha_recomendada, ultimo_dia, franja, estado}`
+
+La puerta no lee documentos: recibe los datos ya extraídos por `secretario` y
+`archivador`, con varias opciones cuando hay duda, y ante la duda se queda con el plazo
+más corto y marca el resultado `provisional`. Devuelve una **lista** porque una misma
+notificación abre a menudo varios plazos (una sentencia, el de aclaración y el de
+recurso). Si alguno ha vencido, bloquea la ruta y avisa al letrado con la explicación,
+nunca en silencio. Detalle en `AGENTES.md`, `pro.caducidad`.
 **Contrato verificación:** `{documento, expediente}` → `{en_plazo, defectos_formales[], destino}`
 
 ### INVESTIGADOR · derecho
@@ -738,7 +745,7 @@ pro.plazo-vivo · pro.forma → pro.lexnet → pro.acuse            Juzgado de l
 **`contrato_arrendamiento`**
 ```
 sec.mail              el letrado abre el asunto
-— sin puerta de plazo —           no hay tipoActo que casar contra la tabla
+— sin puerta de plazo —           no hay acto que buscar en la tabla de plazos
 inv.normativa        LAU 29/1994 y sus LÍMITES IMPERATIVOS: duración mínima,
                      prórrogas, fianza legal, actualización, zonas tensionadas
 red.contractual      clausulado
