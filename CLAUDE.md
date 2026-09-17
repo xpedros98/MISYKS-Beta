@@ -18,7 +18,7 @@ Nueve grupos de agentes, 56 sub-agentes diseñados, uno implementado (`sec.mail`
 
 El proyecto se desarrolla en un contexto de España, pero los tecnicismos pueden tratarse en inglés por conveniencia.
 
-## Órdenes
+## Comandos
 
 Backend (desde `Backend/`, con el venv en `Backend/.venv`). El venv no está en el
 repo y puede no existir todavía en la máquina; compruébalo antes de dar por hecho
@@ -45,6 +45,11 @@ python -m pro.calendario estado                  # Qué hay, qué falta y qué h
 python -m pro.calendario festivos ÁMBITO [AÑO]   # Días inhábiles de un sitio, por cómputo
 python -m pro.calendario calendario ÁMBITO [AÑO] # El año en rejilla, para mirarlo a ojo
 ```
+
+`recolectar` necesita red y no pide credenciales: solo lee dato público. **`pro.calendario`
+todavía no calcula plazos**, solo mantiene el calendario del que se alimentará el motor;
+cómo leer su estado está en AGENTES.md y el proceso para añadir un municipio, en
+`RECOLECCION.md`.
 
 Frontend (desde `Frontend/`): `cargo run`, `cargo build`, `cargo clippy`.
 

@@ -338,6 +338,28 @@ lo que se exige de cada dato:
 
 El procedimiento, escrito para las personas del equipo, está en `RECOLECCION.md`.
 
+**Cómo se lee el estado del calendario.** Tres cosas que se confunden con facilidad:
+
+- **De los cuatro estados, solo `fallido` pide actuar.** `pendiente` es que aún no
+  hay extractor para esa fuente, y `sin_publicar`, que el boletín no ha sacado ese
+  año todavía. Los tres dan fecha prudente por igual: la distinción es para
+  mantenimiento, no para el motor.
+- **El último festivo guardado no es hasta cuándo se puede uno fiar.** Con 2026
+  confirmado entero, el último es el 26 de diciembre y el calendario sirve hasta el
+  31: los días sin festivo entre medias también son dato. Lo segundo es el
+  *horizonte*, que se calcula por ámbito y cómputo contando años consecutivos
+  confirmados y cortando en el primer hueco.
+- **Un ámbito solo llega a firme si toda su cadena lo está** (`08019 → ES-CT → ES`).
+  Un eslabón sin confirmar la invalida entera: sin las fiestas locales no se puede
+  afirmar que un día sea hábil, y suponerlo adelantaría el vencimiento real. Por eso
+  Madrid sale firme en judicial y no en administrativo — sus fiestas del ayuntamiento
+  se tienen, el calendario administrativo de su comunidad no.
+
+**Las dos bases viven en `~/.misyks/`**, fuera del repo: `sec_mail.db` cifrada con
+SQLCipher, y `calendario.db` en SQLite a secas porque los festivos son dato público.
+`recolectar` tarda un par de minutos y va escribiendo, así que consultarla mientras
+corre exige abrirla en solo lectura.
+
 **Ninguna fuente se lee sin verificar el certificado.** Varias administraciones emiten
 con autoridades del sector público español que no vienen en los almacenes de confianza
 habituales (IZENPE, Firmaprofesional). La salida es añadir esa raíz concreta y
