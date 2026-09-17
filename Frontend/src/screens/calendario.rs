@@ -6,13 +6,23 @@
 // describe AGENTES.md -- que el calendario envejezca en silencio -- poniendo
 // delante de alguien del equipo lo que falta y lo que se ha roto.
 //
-// Por eso lo fallido se separa del resto en vez de sumarse a un total: de los
-// tres estados que no son `confirmado`, solo ese pide que alguien actue.
-use iced::widget::{button, column, container, row, scrollable, text};
+// El color no es decoracion: dice urgencia. Lo confirmado se apaga, lo fallido
+// resalta, y lo pendiente se queda en gris porque es trabajo previsto y no una
+// averia. Un cero en la columna FALLIDO tambien va apagado -- resaltar un cero
+// haria que la columna gritara siempre y dejara de significar nada. Todos los
+// colores salen de `estilo`, para que no signifiquen cosas distintas segun la
+// pantalla.
+use iced::widget::{button, column, container, row, scrollable, text, Space};
 use iced::{Element, Length};
 
 use crate::app::Message;
 use crate::calendario::{Averia, CalendarioError, Festivo, Laguna};
+use crate::estilo;
+
+// Anchuras de la tabla de cobertura. Fijas y en un solo sitio, porque cabecera
+// y filas tienen que coincidir o la tabla deja de leerse en columna.
+const ANCHO_NIVEL: f32 = 110.0;
+const ANCHO_CIFRA: f32 = 92.0;
 
 pub struct CalendarioState {
     pub resumen: Result<crate::calendario::Resumen, CalendarioError>,
@@ -50,8 +60,8 @@ impl CalendarioState {
 
     pub fn seleccionar(&mut self, ambito: String) {
         let computo = crate::calendario::COMPUTOS[self.computo];
-        self.dias = crate::calendario::dias_inhabiles(&ambito, computo, self.anio)
-            .unwrap_or_default();
+        self.dias =
+            crate::calendario::dias_inhabiles(&ambito, computo, self.anio).unwrap_or_default();
         self.lagunas =
             crate::calendario::lagunas(&ambito, computo, self.anio).unwrap_or_default();
         self.seleccion = Some(ambito);
@@ -63,6 +73,18 @@ impl CalendarioState {
             self.seleccionar(ambito);
         }
     }
+
+    fn nombre_seleccion(&self) -> &str {
+        self.seleccion
+            .as_deref()
+            .and_then(|id| {
+                self.municipios
+                    .iter()
+                    .find(|m| m.id == id)
+                    .map(|m| m.nombre.as_str())
+            })
+            .unwrap_or("")
+    }
 }
 
 pub fn view(state: &CalendarioState) -> Element<'_, Message> {
@@ -70,141 +92,237 @@ pub fn view(state: &CalendarioState) -> Element<'_, Message> {
         Err(err) => {
             // El error se cuenta entero, con la orden que lo arregla: quien abra
             // esto puede no saber que el calendario se llena desde un terminal.
-            return container(text(err.to_string())).padding(20).into();
+            return container(
+                column![
+                    estilo::titulo("No se puede leer el calendario"),
+                    text(err.to_string()).size(13),
+                ]
+                .spacing(8),
+            )
+            .padding(20)
+            .into();
         }
         Ok(r) => r,
     };
 
-    let mut bloque = column![
-        text(format!(
-            "Version {} · ultimo festivo guardado: {}",
+    scrollable(
+        column![
+            cabecera(resumen),
+            tabla_cobertura(resumen),
+            averias(&resumen.averias),
+            selector(state),
+            detalle(state),
+        ]
+        .spacing(14)
+        .padding(4),
+    )
+    .height(Length::Fill)
+    .into()
+}
+
+fn cabecera(resumen: &crate::calendario::Resumen) -> Element<'_, Message> {
+    row![
+        estilo::titulo("Calendario de festivos"),
+        Space::new().width(Length::Fill),
+        estilo::tenue(format!(
+            "version {} · ultimo festivo guardado {}",
             resumen.version,
             resumen.ultimo_festivo.as_deref().unwrap_or("ninguno")
         )),
-        text(format!(
-            "{:<12}{:>11}{:>11}{:>14}{:>9}",
-            "nivel", "confirmado", "pendiente", "sin publicar", "FALLIDO"
-        )),
     ]
-    .spacing(2);
+    .align_y(iced::Alignment::Center)
+    .into()
+}
 
+fn tabla_cobertura(resumen: &crate::calendario::Resumen) -> Element<'_, Message> {
+    let encabezado = row![
+        estilo::tenue("nivel").width(Length::Fixed(ANCHO_NIVEL)),
+        celda_cabecera("confirmado"),
+        celda_cabecera("pendiente"),
+        celda_cabecera("sin publicar"),
+        celda_cabecera("FALLIDO"),
+    ];
+
+    let mut tabla = column![encabezado].spacing(4);
     for (nivel, confirmado, pendiente, sin_publicar, fallido) in &resumen.cobertura {
-        bloque = bloque.push(text(format!(
-            "{nivel:<12}{confirmado:>11}{pendiente:>11}{sin_publicar:>14}{fallido:>9}"
-        )));
+        tabla = tabla.push(
+            row![
+                // El nivel va con su propio color, el mismo que lleva la marca
+                // de cada dia en la lista de abajo: asi se reconoce sin leer.
+                text(nivel.clone())
+                    .size(13)
+                    .color(estilo::color_nivel(nivel))
+                    .width(Length::Fixed(ANCHO_NIVEL)),
+                celda(*confirmado, estilo::CONFIRMADO),
+                celda(*pendiente, estilo::PENDIENTE),
+                celda(*sin_publicar, estilo::SIN_PUBLICAR),
+                celda(*fallido, estilo::FALLIDO),
+            ]
+            .align_y(iced::Alignment::Center),
+        );
     }
-    bloque = bloque
-        .push(text("").size(6))
-        .push(text("pendiente = no se ha intentado · sin publicar = el boletin aun no lo ha sacado").size(12))
-        .push(averias(&resumen.averias));
 
-    let selector = seleccion_municipio(state);
-    let detalle = detalle_ambito(state);
+    tabla = tabla.push(Space::new().height(Length::Fixed(4.0))).push(
+        estilo::tenue(
+            "pendiente = no se ha intentado  ·  sin publicar = el boletin aun no lo ha sacado  \
+             ·  FALLIDO = se intento y fallo",
+        ),
+    );
 
-    column![bloque, selector, detalle]
-        .spacing(16)
-        .padding(10)
+    estilo::tarjeta(tabla).width(Length::Fill).into()
+}
+
+fn celda_cabecera<'a>(etiqueta: &'a str) -> Element<'a, Message> {
+    estilo::tenue(etiqueta)
+        .width(Length::Fixed(ANCHO_CIFRA))
+        .align_x(iced::alignment::Horizontal::Right)
+        .into()
+}
+
+fn celda<'a>(valor: i64, color: iced::Color) -> Element<'a, Message> {
+    // Un cero se apaga siempre. Una columna que resalta aunque no haya nada que
+    // mirar deja de avisar de nada.
+    let color = if valor == 0 { estilo::TENUE } else { color };
+    estilo::mono(valor.to_string())
+        .color(color)
+        .width(Length::Fixed(ANCHO_CIFRA))
+        .align_x(iced::alignment::Horizontal::Right)
         .into()
 }
 
 fn averias(averias: &[Averia]) -> Element<'_, Message> {
     if averias.is_empty() {
-        return text("Ninguna fuente ha fallado.").size(12).into();
+        return estilo::tenue("Ninguna fuente ha fallado.").into();
     }
     let mut bloque = column![text(format!(
-        "{} fuentes se han intentado y han fallado:",
+        "{} fuentes se han intentado y han fallado",
         averias.len()
-    ))]
-    .spacing(2);
+    ))
+    .size(14)
+    .color(estilo::FALLIDO)]
+    .spacing(3);
     for a in averias {
-        let detalle = a.detalle.as_deref().unwrap_or("");
         bloque = bloque.push(
-            text(format!("  {} {} {} — {}", a.ambito, a.anio, a.computo, detalle)).size(12),
+            estilo::mono(format!(
+                "{:<10} {} {:<15} {}",
+                a.ambito,
+                a.anio,
+                a.computo,
+                a.detalle.as_deref().unwrap_or("")
+            ))
+            .size(12),
         );
     }
-    bloque.into()
+    estilo::tarjeta(bloque).width(Length::Fill).into()
 }
 
-fn seleccion_municipio(state: &CalendarioState) -> Element<'_, Message> {
-    let mut fila = row![].spacing(6);
+fn selector(state: &CalendarioState) -> Element<'_, Message> {
+    let mut municipios = row![].spacing(6);
     for m in &state.municipios {
-        let seleccionado = state.seleccion.as_deref() == Some(m.id.as_str());
-        let b = button(text(m.nombre.as_str()).size(12));
-        fila = fila.push(if seleccionado {
-            b
+        let elegido = state.seleccion.as_deref() == Some(m.id.as_str());
+        let boton = button(text(m.nombre.as_str()).size(12)).style(if elegido {
+            button::primary
         } else {
-            b.on_press(Message::CalendarioAmbito(m.id.clone()))
+            button::secondary
+        });
+        municipios = municipios.push(if elegido {
+            boton
+        } else {
+            boton.on_press(Message::CalendarioAmbito(m.id.clone()))
         });
     }
 
     let mut computos = row![].spacing(6);
     for (i, c) in crate::calendario::COMPUTOS.iter().enumerate() {
-        let b = button(text(*c).size(12));
-        computos = computos.push(if i == state.computo {
-            b
+        let elegido = i == state.computo;
+        let boton = button(text(*c).size(12)).style(if elegido {
+            button::primary
         } else {
-            b.on_press(Message::CalendarioComputo(i))
+            button::secondary
+        });
+        computos = computos.push(if elegido {
+            boton
+        } else {
+            boton.on_press(Message::CalendarioComputo(i))
         });
     }
 
-    column![scrollable(fila).width(Length::Fill), computos].spacing(6).into()
+    column![
+        scrollable(municipios).width(Length::Fill),
+        row![estilo::tenue("computo:"), computos]
+            .spacing(8)
+            .align_y(iced::Alignment::Center),
+    ]
+    .spacing(8)
+    .into()
 }
 
-fn detalle_ambito(state: &CalendarioState) -> Element<'_, Message> {
+fn detalle(state: &CalendarioState) -> Element<'_, Message> {
     let Some(ambito) = &state.seleccion else {
-        return text("Selecciona un municipio.").into();
-    };
-    // FIRME o PROVISIONAL es lo primero que hay que ver: es lo que decidira si
-    // un plazo calculado sobre este sitio puede darse por bueno.
-    let estado = if state.lagunas.is_empty() {
-        "FIRME".to_string()
-    } else {
-        format!(
-            "PROVISIONAL — faltan: {}",
-            state
-                .lagunas
-                .iter()
-                .map(|l| format!("{} ({})", l.ambito, l.estado))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
+        return estilo::tenue("Selecciona un municipio.").into();
     };
 
-    let mut lista = column![].spacing(2);
+    // FIRME o PROVISIONAL es lo primero que hay que ver: es lo que decide si un
+    // plazo calculado sobre este sitio puede darse por bueno.
+    let mut veredicto = row![].spacing(6).align_y(iced::Alignment::Center);
+    if state.lagunas.is_empty() {
+        veredicto = veredicto.push(text("FIRME").size(13).color(estilo::CONFIRMADO));
+    } else {
+        veredicto = veredicto.push(text("PROVISIONAL").size(13).color(estilo::SIN_PUBLICAR));
+        veredicto = veredicto.push(estilo::tenue("le falta"));
+        // Cada laguna con el color de SU estado: no es lo mismo que falte algo
+        // que nadie ha leido todavia (gris) que algo que se intento y revento
+        // (rojo). Fundirlas en un texto plano perderia esa diferencia, que es
+        // precisamente la que dice si hay que hacer algo.
+        for l in &state.lagunas {
+            veredicto = veredicto.push(
+                estilo::mono(format!("{} ({})", l.ambito, l.estado))
+                    .size(12)
+                    .color(estilo::color_estado(&l.estado)),
+            );
+        }
+    }
+
+    let cabecera = row![
+        estilo::titulo(format!("{} · {}", state.nombre_seleccion(), ambito)),
+        estilo::tenue(format!(
+            "{} · {} dias de boletin",
+            state.anio,
+            state.dias.len()
+        )),
+        Space::new().width(Length::Fill),
+        veredicto,
+    ]
+    .spacing(10)
+    .align_y(iced::Alignment::Center);
+
+    let mut lista = column![].spacing(3);
     for d in &state.dias {
-        // La marca dice de que nivel viene el dia, que es la pregunta que
-        // surge al ver un festivo que no se esperaba.
-        let marca = match d.tipo.as_str() {
-            "nacional" => "N",
-            "autonomico" => "A",
-            "insular" => "I",
-            _ => "L",
-        };
         lista = lista.push(
-            text(format!(
-                "  {}  [{}] {:<10} {}",
-                d.fecha,
-                marca,
-                d.ambito,
-                d.nombre.as_deref().unwrap_or("")
-            ))
-            .size(12),
+            row![
+                estilo::mono(d.fecha.clone()).width(Length::Fixed(100.0)),
+                // La marca dice de que nivel viene el dia, que es la pregunta
+                // que surge al ver un festivo inesperado; lleva el mismo color
+                // que ese nivel en la tabla de arriba.
+                text(estilo::marca_nivel(&d.tipo))
+                    .size(13)
+                    .color(estilo::color_nivel(&d.tipo))
+                    .width(Length::Fixed(18.0)),
+                estilo::mono(d.ambito.clone())
+                    .color(estilo::TENUE)
+                    .width(Length::Fixed(80.0)),
+                text(d.nombre.clone().unwrap_or_default()).size(13),
+            ]
+            .align_y(iced::Alignment::Center),
         );
     }
 
     column![
-        text(format!(
-            "{} · {} · {} · {} dias de boletin · {}",
-            ambito,
-            state.anio,
-            crate::calendario::COMPUTOS[state.computo],
-            state.dias.len(),
-            estado
-        )),
-        // Los fines de semana no salen: son regla del motor, no dato de
-        // boletin, y marcarlos aqui haria creer que el calendario los conoce.
-        text("Sabados y domingos no aparecen: son regla del motor, no dato de boletin.").size(11),
-        scrollable(lista).height(Length::Fill),
+        cabecera,
+        estilo::tenue(
+            "Sabados y domingos no aparecen: son regla del motor, no dato de boletin."
+        ),
+        estilo::tarjeta(lista).width(Length::Fill),
     ]
     .spacing(6)
     .into()

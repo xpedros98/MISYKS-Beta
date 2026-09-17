@@ -1,4 +1,5 @@
 use iced::widget::{button, column, row};
+use iced::Length;
 use iced::Element;
 
 use crate::screens::calendario::CalendarioState;
@@ -79,7 +80,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
         nav_button(Screen::Calendario, state.current_screen),
         nav_button(Screen::Ajustes, state.current_screen),
     ]
-    .spacing(10);
+    .spacing(4);
 
     let content = match state.current_screen {
         Screen::Home => screens::home::view(),
@@ -90,14 +91,20 @@ pub fn view(state: &State) -> Element<'_, Message> {
         Screen::Ajustes => screens::settings::view(&state.settings),
     };
 
-    column![nav, content].spacing(20).padding(20).into()
+    column![nav, content].spacing(16).padding(16).height(Length::Fill).into()
 }
 
 fn nav_button(target: Screen, current: Screen) -> Element<'static, Message> {
     let label = target.label();
+    // La pestana activa se rellena y las demas quedan planas: es lo que hace
+    // que se lean como pestanas y no como una fila de botones iguales. Sin
+    // esto, la unica pista de donde estas era que una no se podia pulsar.
     if target == current {
-        button(label).into()
+        button(label).style(button::primary).into()
     } else {
-        button(label).on_press(Message::NavigateTo(target)).into()
+        button(label)
+            .style(button::text)
+            .on_press(Message::NavigateTo(target))
+            .into()
     }
 }
