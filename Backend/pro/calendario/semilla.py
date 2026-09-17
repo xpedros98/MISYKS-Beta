@@ -91,9 +91,21 @@ def cargar(cal, ruta=RUTA_DATOS, registro=print):
         (c.get("ambito"), c.get("fecha", "0000")[:4], c.get("computo"))
         for c, _ in rechazados
     }
+    motivos = {}
+    for candidato, problemas in rechazados:
+        clave = (candidato.get("ambito"), candidato.get("fecha", "0000")[:4],
+                 candidato.get("computo"))
+        motivos.setdefault(clave, []).extend(problemas)
+
     for ambito, anio, computo, fuente_id in confirmados:
-        if (ambito, str(anio), computo) in fallidos:
-            registro(f"  · {ambito} {anio} {computo}: queda pendiente, hay entradas rechazadas")
+        clave = (ambito, str(anio), computo)
+        if clave in fallidos:
+            # Una entrada rechazada es «se intento y no paso la verificacion»,
+            # que no es lo mismo que «no se ha mirado»: queda `fallido` con el
+            # motivo, para que se vea que hay algo que corregir en el fichero.
+            registro(f"  · {ambito} {anio} {computo}: fallido, hay entradas rechazadas")
+            cal.fijar_cobertura(ambito, anio, computo, "fallido", version, fuente_id,
+                                detalle="; ".join(motivos.get(clave, [])[:3]))
             continue
         cal.fijar_cobertura(ambito, anio, computo, "confirmado", version, fuente_id)
 

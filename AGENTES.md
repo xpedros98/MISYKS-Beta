@@ -275,9 +275,14 @@ oficiales, lee las publicaciones y escribe los festivos que el motor consume.
   - **Un fallo nunca se traga.** Si no consigue leer una publicación, deja su
     cobertura en `pendiente` y sigue con la siguiente. Un hueco silencioso se
     confundiría con días hábiles y aparecería semanas después como un plazo perdido.
-  - **Distingue `pendiente` de `sin_publicar`.** Lo primero hay que arreglarlo; lo
-    segundo es normal —las locales salen entre agosto y diciembre del año anterior—.
-    Los dos dan fecha prudente, pero solo uno pide intervención.
+  - **Tres motivos distintos para no tener un dato, y no se mezclan.** `pendiente`
+    es «no se ha intentado»: no hay extractor para esa fuente todavía, trabajo
+    previsto. `sin_publicar` es «se miró y el boletín aún no ha sacado ese año»,
+    normal entre enero y octubre. `fallido` es «se intentó y salió mal», y lleva el
+    motivo guardado con la fila. Los tres dan fecha prudente igual, así que para el
+    motor son lo mismo; la diferencia es para quien mantiene el calendario, y sin
+    ella una fuente que se rompe se confunde con una que nunca se ha escrito y la
+    regresión se queda ahí indefinidamente.
   - **No es de una sola pasada**, aunque lo parezca: las correcciones a mitad de año
     obligan a repetirla, y por eso guarda la huella de cada documento leído.
   - Es un **agente de software**, sin LLM. Solo lee dato público, así que puede correr

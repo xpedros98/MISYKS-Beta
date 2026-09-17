@@ -965,6 +965,11 @@ Decisiones que conviene no perder:
   cómputo. Ausencia de fila cuenta como `pendiente`, nunca como `confirmado`: una
   base vacía no sabe nada y tiene que comportarse como tal. Es lo que permitirá al
   motor marcar `provisional` en vez de dar por hábil un día que no ha comprobado.
+- **Cuatro estados, y los tres que no son `confirmado` no son intercambiables.**
+  `pendiente` (no se ha intentado), `sin_publicar` (se miró, el boletín aún no lo ha
+  sacado) y `fallido` (se intentó y reventó, con el motivo en `detalle`). Para el
+  motor los tres dan fecha prudente; la distinción es para mantenimiento, y es lo
+  que hace que una regresión no se disfrace de trabajo pendiente.
 - **Nada se borra: `alta` y `baja` por versión.** Las comunidades rectifican con el
   año empezado. Toda consulta acepta una versión, así que el `version_calendario` que
   el contrato del sub-agente devuelve basta para repetir un cálculo tal como se hizo.

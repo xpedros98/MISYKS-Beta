@@ -95,11 +95,21 @@ def _estado(cal):
     cuenta = {}
     for ambito, tipo, nombre, anio, computo, estado in cal.mapa_cobertura(anios):
         cuenta[(tipo, estado)] = cuenta.get((tipo, estado), 0) + 1
-    print(f"{'nivel':<12} {'confirmado':>11} {'pendiente':>10} {'sin publicar':>13}")
+    print(f"{'nivel':<12} {'confirmado':>11} {'sin leer':>9} {'sin publicar':>13} {'FALLIDO':>8}")
     for tipo in db.TIPOS_AMBITO:
-        fila = [cuenta.get((tipo, e), 0) for e in ("confirmado", "pendiente", "sin_publicar")]
+        fila = [cuenta.get((tipo, e), 0) for e in db.COBERTURA]
         if any(fila):
-            print(f"{tipo:<12} {fila[0]:>11} {fila[1]:>10} {fila[2]:>13}")
+            print(f"{tipo:<12} {fila[0]:>11} {fila[1]:>9} {fila[2]:>13} {fila[3]:>8}")
+
+    # Lo fallido se detalla siempre: es lo unico de esta pantalla que pide que
+    # alguien haga algo. Lo demas es estado normal del trabajo pendiente.
+    averias = cal.averias(anios)
+    if averias:
+        print(f"\n{len(averias)} fuentes se han intentado y han fallado:")
+        for ambito, anio, computo, detalle in averias:
+            print(f"  {ambito:10} {anio} {computo:15} {(detalle or '')[:70]}")
+    else:
+        print("\nNinguna fuente ha fallado.")
     return 0
 
 

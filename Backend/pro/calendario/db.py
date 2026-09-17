@@ -40,12 +40,22 @@ from pathlib import Path
 DATA_DIR = Path.home() / ".misyks"
 DB_PATH = DATA_DIR / "calendario.db"
 
-# Estados de `cobertura`. La diferencia entre los dos últimos importa: en
-# `pendiente` el dato existe y aún no se ha recogido; en `sin_publicar` es que
-# el boletín todavía no lo ha sacado (las locales salen entre agosto y
-# diciembre del año anterior). Los dos producen fecha prudente, pero solo el
-# segundo es normal y no hay nada que arreglar.
-COBERTURA = ("confirmado", "pendiente", "sin_publicar")
+# Estados de `cobertura`. Los tres que no son `confirmado` dan fecha prudente
+# por igual, así que para el motor son lo mismo; la diferencia es para quien
+# mantiene el calendario, y separarlos es lo que hace accionable la pantalla de
+# mantenimiento:
+#
+# - `pendiente`   -- no se ha intentado: no hay extractor para esa fuente. Es
+#                   trabajo previsto, no una avería.
+# - `sin_publicar`-- se miró y el boletín aún no ha sacado ese año. Normal entre
+#                   enero y octubre; no hay nada que hacer salvo esperar.
+# - `fallido`     -- se intentó y salió mal. Esto sí pide que alguien mire, y
+#                   `detalle` dice qué pasó.
+#
+# Sin el tercero, una fuente que se rompe --el boletín cambia de maquetación--
+# se confunde con una que nunca se ha escrito, y una regresión pasa por
+# pendiente indefinidamente.
+COBERTURA = ("confirmado", "pendiente", "sin_publicar", "fallido")
 
 # Los dos calendarios. No son el mismo con otro nombre: el judicial lo fija el
 # art. 182 LOPJ por remisión a las fiestas laborales, y el administrativo sale
@@ -131,7 +141,8 @@ CREATE TABLE IF NOT EXISTS cobertura (
     ambito_id     TEXT NOT NULL REFERENCES ambitos(id),
     anio          INTEGER NOT NULL,
     computo       TEXT NOT NULL,   -- judicial | administrativo
-    estado        TEXT NOT NULL,   -- confirmado | pendiente | sin_publicar
+    estado        TEXT NOT NULL,   -- confirmado | pendiente | sin_publicar | fallido
+    detalle       TEXT,            -- por qué, cuando el estado es `fallido`
     comprobado_en TEXT,
     fuente_id     INTEGER REFERENCES fuentes(id),
     alta          INTEGER NOT NULL REFERENCES versiones(id),
@@ -172,6 +183,7 @@ class Calendario:
         self.conn = sqlite3.connect(str(ruta))
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(ESQUEMA)
+        self._migrar()
         self.conn.row_factory = sqlite3.Row
         with self.conn:
             # El ámbito nacional no lo trae ningún boletín: es la raíz del
@@ -180,6 +192,18 @@ class Calendario:
                 "INSERT OR IGNORE INTO ambitos (id, tipo, nombre, padre)"
                 " VALUES ('ES', 'nacional', 'España', NULL)"
             )
+
+    def _migrar(self):
+        """Añade a una base ya creada lo que el esquema haya ganado después.
+
+        `CREATE TABLE IF NOT EXISTS` no toca una tabla que ya existe, así que
+        una columna nueva no llega sola a las bases de quien ya recolectó. Se
+        añade con ALTER, que en SQLite no reescribe la tabla ni pierde filas.
+        """
+        columnas = {f[1] for f in self.conn.execute("PRAGMA table_info(cobertura)")}
+        if "detalle" not in columnas:
+            with self.conn:
+                self.conn.execute("ALTER TABLE cobertura ADD COLUMN detalle TEXT")
 
     def cerrar(self):
         self.conn.close()
@@ -275,8 +299,14 @@ class Calendario:
             )
             return cur.rowcount > 0
 
-    def fijar_cobertura(self, ambito_id, anio, computo, estado, version, fuente_id=None):
-        """Declara si se tiene el dato de ese ámbito, año y cómputo."""
+    def fijar_cobertura(self, ambito_id, anio, computo, estado, version,
+                        fuente_id=None, detalle=None):
+        """Declara si se tiene el dato de ese ámbito, año y cómputo.
+
+        `detalle` acompaña a `fallido`: el mensaje del error que impidió leer
+        la fuente. Se guarda con la fila y no solo en un log porque la pregunta
+        «¿por qué no tengo esto?» se hace meses después, mirando la tabla.
+        """
         _comprueba_computo(computo)
         if estado not in COBERTURA:
             raise ValueError(f"Estado de cobertura desconocido: {estado}")
@@ -295,14 +325,16 @@ class Calendario:
             )
             self.conn.execute(
                 """INSERT INTO cobertura
-                       (ambito_id, anio, computo, estado, comprobado_en, fuente_id, alta, baja)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                       (ambito_id, anio, computo, estado, detalle, comprobado_en,
+                        fuente_id, alta, baja)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
                    ON CONFLICT (ambito_id, anio, computo, alta) DO UPDATE SET
                        estado = excluded.estado,
+                       detalle = excluded.detalle,
                        comprobado_en = excluded.comprobado_en,
                        fuente_id = excluded.fuente_id,
                        baja = NULL""",
-                (ambito_id, anio, computo, estado, _ahora(), fuente_id, version),
+                (ambito_id, anio, computo, estado, detalle, _ahora(), fuente_id, version),
             )
 
     def _festivo_vigente(self, ambito_id, fecha, computo, version):
@@ -438,6 +470,29 @@ class Calendario:
             for a in ambitos
             for anio in anios
             for computo in COMPUTOS
+        ]
+
+    def averias(self, anios, version=None):
+        """Lo que se intento leer y salio mal: [(ambito, anio, computo, detalle)].
+
+        Es la lista corta y accionable. `pendiente` y `sin_publicar` describen
+        trabajo previsto o espera; esto es lo unico que significa «algo se ha
+        roto», y por eso se consulta aparte en vez de mezclarse en el recuento.
+        """
+        version = self._version(version)
+        marcas, parametros = [], {"version": version}
+        for i, anio in enumerate(anios):
+            parametros[f"y{i}"] = anio
+            marcas.append(f":y{i}")
+        return [
+            (f["ambito_id"], f["anio"], f["computo"], f["detalle"])
+            for f in self.conn.execute(
+                f"""SELECT c.ambito_id, c.anio, c.computo, c.detalle FROM cobertura c
+                    WHERE c.estado = 'fallido' AND c.anio IN ({", ".join(marcas)})
+                      AND {_VIGENTE.format(t='c')}
+                    ORDER BY c.ambito_id, c.anio""",
+                parametros,
+            )
         ]
 
     def fuentes_a_revisar(self, anios):

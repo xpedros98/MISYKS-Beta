@@ -148,9 +148,14 @@ Verifica todo antes de escribir nada. Cinco comprobaciones:
 5. Una fiesta local no cae en un festivo autonómico o nacional — si coincide,
    es que se ha leído mal la columna.
 
-Lo rechazado no se escribe, y **un municipio con una entrada rechazada no se
-confirma entero**: lo que se sabe de él está incompleto, así que sigue dando
-fecha provisional.
+Lo rechazado no se escribe, y **un municipio con una entrada rechazada queda
+`fallido`**, con el motivo guardado: lo que se sabe de él está incompleto, así
+que sigue dando fecha provisional, pero se ve que hay algo que corregir en el
+fichero y no que falte por hacer.
+
+En `python -m pro.calendario estado`, la columna **FALLIDO** es la única que
+pide que alguien actúe. `sin leer` es trabajo previsto y `sin publicar` es
+esperar a que salga el boletín.
 
 La orden devuelve código de salida 1 si hay rechazos, para que se note en un
 script.

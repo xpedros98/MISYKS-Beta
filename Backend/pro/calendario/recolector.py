@@ -90,7 +90,12 @@ def recolectar(cal, anios, registro=print):
                 # queda marcado como no sabido.
                 registro(f"  ! {anio} {computo}: {type(e).__name__}: {e}")
                 resumen["fallos"].append((f"ES/{computo}", anio, str(e)))
-                _declarar(cal, resumen, "ES", anio, computo, "pendiente", version)
+                # `fallido`, no `pendiente`: se intento y reventó. Marcarlo
+                # como pendiente lo haria indistinguible de una fuente que
+                # nunca se ha escrito, y una regresion se quedaria ahi.
+                for ambito in _ambitos_que_cubre(computo):
+                    _declarar(cal, resumen, ambito, anio, computo, "fallido",
+                              version, detalle=f"{type(e).__name__}: {e}")
 
         for modulo in LOCALES:
             try:
@@ -104,12 +109,16 @@ def recolectar(cal, anios, registro=print):
             except Exception as e:
                 registro(f"  ! {modulo.AMBITO} {anio}: {type(e).__name__}: {e}")
                 resumen["fallos"].append((modulo.AMBITO, anio, str(e)))
+                for computo in modulo.COMPUTOS:
+                    _declarar(cal, resumen, modulo.AMBITO, anio, computo, "fallido",
+                              version, detalle=f"{type(e).__name__}: {e}")
 
     _marcar_lo_no_leido(cal, anios, version, resumen, registro)
     return resumen
 
 
-def _declarar(cal, resumen, ambito, anio, computo, estado, version, fuente_id=None):
+def _declarar(cal, resumen, ambito, anio, computo, estado, version,
+              fuente_id=None, detalle=None):
     """Fija una cobertura y la apunta como ya dicha en esta pasada.
 
     Todo el recolector pasa por aquí en vez de llamar a `fijar_cobertura`
@@ -117,7 +126,7 @@ def _declarar(cal, resumen, ambito, anio, computo, estado, version, fuente_id=No
     llegó a mirar la publicación sabe más que el barrido final, que solo sabe
     que no hay extractor.
     """
-    cal.fijar_cobertura(ambito, anio, computo, estado, version, fuente_id)
+    cal.fijar_cobertura(ambito, anio, computo, estado, version, fuente_id, detalle)
     resumen["declarados"].add((ambito, anio, computo))
     if estado == "confirmado":
         resumen["confirmados"].append((ambito, anio, computo))
@@ -250,7 +259,9 @@ def _marcar_lo_no_leido(cal, anios, version, resumen, registro):
     for anio in anios:
         for computo in COMPUTOS:
             for ambito in municipios + ambitos_sin_leer:
-                # Solo lo que nadie ha dictaminado ya en esta pasada.
+                # Solo lo que nadie ha dictaminado ya: `pendiente` significa
+                # aqui «no se ha intentado», que es lo cierto -- no hay
+                # extractor para esa fuente todavia.
                 if (ambito, anio, computo) not in resumen["declarados"]:
                     _declarar(cal, resumen, ambito, anio, computo, "pendiente", version)
     registro(
