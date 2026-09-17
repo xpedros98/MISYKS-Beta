@@ -1,11 +1,13 @@
 # Agentes
 
 > Para qué sirve cada sub-agente y qué no puede hacer. Nueve grupos, 56
-> sub-agentes. Solo `sec.mail` existe en código; el resto es diseño.
+> sub-agentes. Solo dos tienen código; el resto es diseño.
 > La arquitectura del sistema —cómo se componen los grupos, las rutas, los
-> arquetipos— está en `ARQUITECTURA.md`. Última actualización: 2026-09-16
+> arquetipos— está en `ARQUITECTURA.md`. Última actualización: 2026-09-17
 
-**Estado.** Implementado: `sec.mail`. Los otros 55 son diseño, sin código.
+**Estado.** Implementado: `sec.mail`. A medias: `pro.calendario`, del que existe el
+calendario de festivos y su recolector pero **no el motor de días**, que es el
+sub-agente propiamente dicho. Los otros 54 son diseño, sin código.
 
 Cada entrada sigue la misma plantilla: qué hace, su contrato, las reglas de dominio
 que debe respetar, cómo falla y de qué depende. Un sub-agente está bien acotado
@@ -30,27 +32,40 @@ La capa del despacho. Sabe recibir, clasificar, recordar y enviar; no sabe de pl
 ni de derecho, y no toca ningún canal procesal.
 
 **`sec.mail`** — receptor · agente de software, en local · **implementado** (lo que aún falta, en §8.3)
-Gmail sobre IMAP, base local cifrada con SQLCipher. Corre en el ordenador del
-letrado, no en el servidor: tiene la contraseña del correo y lee el contenido sin
-anonimizar, así que ese contenido no sale de su máquina.
+Gmail API o Microsoft Graph, **autenticadas por OAuth**, y base local cifrada con
+SQLCipher. Corre en el ordenador del letrado, no en el servidor: tiene el acceso al
+correo y lee el contenido sin anonimizar, así que ese contenido no sale de su
+máquina. IMAP sobrevive solo como transporte del «tercer mundo» —iCloud, Fastmail,
+servidores propios—, con contraseña de aplicación y todavía sin adaptador
+(`ARQUITECTURA.md` §8.6).
 
-- **Contrato:** `{cuenta_imap, ventana}` → `{mensajes[], adjuntos[], resumen}`
+- **Contrato:** `{cuenta, ventana}` → `{mensajes[], adjuntos[], resumen}`
 - **Reglas:**
-  - IMAP y no POP: el correo permanece en el servidor y el letrado lo sigue viendo
-    desde sus propios dispositivos. El agente lee, no vacía.
-  - **Idempotencia por identidad estable del mensaje** (en Gmail, `X-GM-MSGID`) y,
-    por carpeta, por `UIDVALIDITY` + último UID: al reconectar no puede reprocesar lo
-    ya visto. Sin esto, una caída de red duplica expedientes.
+  - El agente **lee, no vacía**: el correo permanece en el servidor y el letrado lo
+    sigue viendo desde sus propios dispositivos. Tampoco marca como leído.
+  - **La identidad del mensaje es `(proveedor, mensaje_id)`**, no el identificador a
+    secas: dos proveedores pueden dar el mismo y no son el mismo correo. En Graph,
+    además, **mover cambia el identificador**, así que la fila se queda con el nuevo.
+  - **El cursor de sincronización es opaco** —`historyId` en Google, `deltaLink` en
+    Graph— y se guarda sin interpretarlo. Si el proveedor lo rechaza por antiguo, se
+    hace inventario completo en vez de fallar: repetir identificadores es inofensivo,
+    perderlos sería un correo que el despacho no ve.
+  - **El cursor no es la garantía de no perder nada; la cola sí.** Las dos APIs
+    avanzan el cursor de golpe al final de la respuesta, no mensaje a mensaje. Lo
+    anunciado se apunta en una cola *antes* de guardar el cursor, y cada correo sale
+    de ella solo cuando está guardado. El cursor dice hasta dónde se ha *preguntado*;
+    la cola, qué falta por *traer*.
   - Separa cuerpo y adjuntos como documentos distintos, y **desciende por los
     reenvíos anidados**: el documento relevante suele ir dentro de un forward, no en
     el primer nivel.
   - Conserva cabeceras como metadato probatorio: fecha de recepción y remitente.
   - Produce el **resumen** que consume `sec.clasificador`. Extraer adjuntos ocurre
     antes de resumir, nunca después.
-- **Falla si:** reprocesa tras reconectar; pierde el adjunto anidado; resume antes de
-  extraer.
-- **Necesita:** credenciales (contraseña de aplicación u OAuth) y el estado de
-  sincronización de cada carpeta (`UIDVALIDITY` + último UID).
+- **Falla si:** guarda el cursor antes de encolar lo anunciado, y pierde los correos
+  de una tanda interrumpida; identifica un mensaje sin su proveedor; pierde el
+  adjunto anidado; resume antes de extraer.
+- **Necesita:** tokens de OAuth (que se rotan, así que hay que poder reescribirlos) y,
+  por carpeta, el cursor del proveedor más la cola de lo pendiente de descargar.
 
 **`sec.ocr`** — documentos fotografiados
 No escaneados: **fotografiados**. El cliente manda la foto del burofax con el móvil,
