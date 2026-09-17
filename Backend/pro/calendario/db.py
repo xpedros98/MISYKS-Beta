@@ -54,6 +54,17 @@ COBERTURA = ("confirmado", "pendiente", "sin_publicar")
 # catálogo.
 COMPUTOS = ("judicial", "administrativo")
 
+
+class SinPublicar(Exception):
+    """La fuente existe y se ha leído, pero todavía no cubre ese año.
+
+    No es un fallo y por eso tiene tipo propio: los festivos del año siguiente
+    se aprueban en otoño, así que pedirlos en septiembre es normal. Tratarlo
+    como avería dejaría la cobertura en `pendiente` y alguien se pondría a
+    buscar un problema inexistente; el estado correcto es `sin_publicar`.
+    """
+
+
 # Niveles de `ambitos`, de más general a más concreto. `insular` existe por
 # Canarias, que añade fiestas por isla entre la comunidad y el municipio.
 TIPOS_AMBITO = ("nacional", "autonomico", "insular", "local")

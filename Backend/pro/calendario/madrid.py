@@ -34,6 +34,7 @@ import urllib.error
 import urllib.request
 
 from . import certificados
+from .db import SinPublicar
 
 AMBITO = "28079"
 BOLETIN = "datos.madrid.es"
@@ -82,21 +83,32 @@ def locales(crudo, anio):
         )
 
     salida = []
+    del_anio = 0
     for fila in filas:
         dia = (fila.get("Dia") or "").strip()
         if not dia.endswith(f"/{anio}"):
             continue
+        del_anio += 1
         if (fila.get("Tipo de Festivo") or "").strip().lower() != TIPO_LOCAL:
             continue
         salida.append((AMBITO, _fecha(dia), (fila.get("Festividad") or "").strip()))
 
+    # Sin ninguna fila de ese año, el fichero simplemente no lo cubre todavía:
+    # el calendario municipal del año siguiente se aprueba en otoño. Eso no es
+    # una avería, es «aún no toca», y hay que decirlo así -- si se tratara como
+    # error, la cobertura quedaría `pendiente` y alguien se pondría a buscar un
+    # problema que no existe.
+    if del_anio == 0:
+        raise SinPublicar(f"El fichero de datos.madrid.es todavía no cubre {anio}.")
+
     if len(salida) not in LOCALES_ESPERADOS:
-        # Fallar aquí es lo correcto: cero festivos locales entraría en la base
-        # como «Madrid no tiene fiestas propias», que es falso y no da ningún
+        # Esto sí es una avería: el año está en el fichero pero sus fiestas
+        # locales no aparecen o aparecen de más. Cero entraría en la base como
+        # «Madrid no tiene fiestas propias», que es falso y no da ningún
         # síntoma hasta que alguien pierde un plazo el día de San Isidro.
         raise ValueError(
-            f"Se han encontrado {len(salida)} fiestas locales de Madrid para {anio} "
-            f"y se esperaban una o dos. ¿Ha cambiado el fichero, o no cubre aún {anio}?"
+            f"Hay {del_anio} días de {anio} en el fichero pero {len(salida)} fiestas "
+            f"locales, y se esperaban una o dos. ¿Ha cambiado el formato?"
         )
     return salida
 

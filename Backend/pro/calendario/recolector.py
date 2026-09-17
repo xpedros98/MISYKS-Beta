@@ -23,7 +23,7 @@ después en forma de plazo perdido y sin nada que lo explique.
 import hashlib
 
 from . import boe, fuentes, madrid
-from .db import COMPUTOS
+from .db import COMPUTOS, SinPublicar
 
 # Qué sabe leer el recolector hoy. La clave es (ámbito, boletín). Lo que no
 # está aquí queda registrado como fuente pero sin extractor, y su cobertura no
@@ -64,7 +64,16 @@ def recolectar(cal, anios, registro=print):
     """
     sembrar(cal)
     version = cal.nueva_version(f"recolección de {', '.join(str(a) for a in anios)}")
-    resumen = {"version": version, "anotados": 0, "retirados": 0, "confirmados": [], "fallos": []}
+    # `declarados` lleva la cuenta de cada (ámbito, año, cómputo) sobre el que
+    # ya se ha dicho algo en esta pasada. Es lo que impide que el barrido final
+    # pise un veredicto más preciso: la resolución del BOE deja las diecinueve
+    # comunidades en `sin_publicar` cuando el año todavía no ha salido, y sin
+    # esto el barrido las degradaba a `pendiente`, borrando la diferencia entre
+    # «no toca aún» y «hay algo que arreglar» justo donde más importa.
+    resumen = {
+        "version": version, "anotados": 0, "retirados": 0,
+        "confirmados": [], "declarados": set(), "fallos": [],
+    }
 
     for anio in anios:
         # El judicial va primero y no es indiferente: el calendario
@@ -81,17 +90,37 @@ def recolectar(cal, anios, registro=print):
                 # queda marcado como no sabido.
                 registro(f"  ! {anio} {computo}: {type(e).__name__}: {e}")
                 resumen["fallos"].append((f"ES/{computo}", anio, str(e)))
-                cal.fijar_cobertura("ES", anio, computo, "pendiente", version)
+                _declarar(cal, resumen, "ES", anio, computo, "pendiente", version)
 
         for modulo in LOCALES:
             try:
                 _recolectar_local(cal, modulo, anio, version, resumen, registro)
+            except SinPublicar as e:
+                # No es un fallo: el año todavía no está publicado.
+                registro(f"  · {modulo.AMBITO} {anio}: {e}")
+                for computo in modulo.COMPUTOS:
+                    _declarar(cal, resumen, modulo.AMBITO, anio, computo,
+                              "sin_publicar", version)
             except Exception as e:
                 registro(f"  ! {modulo.AMBITO} {anio}: {type(e).__name__}: {e}")
                 resumen["fallos"].append((modulo.AMBITO, anio, str(e)))
 
     _marcar_lo_no_leido(cal, anios, version, resumen, registro)
     return resumen
+
+
+def _declarar(cal, resumen, ambito, anio, computo, estado, version, fuente_id=None):
+    """Fija una cobertura y la apunta como ya dicha en esta pasada.
+
+    Todo el recolector pasa por aquí en vez de llamar a `fijar_cobertura`
+    directamente. La regla es «quien habla primero manda»: el extractor que
+    llegó a mirar la publicación sabe más que el barrido final, que solo sabe
+    que no hay extractor.
+    """
+    cal.fijar_cobertura(ambito, anio, computo, estado, version, fuente_id)
+    resumen["declarados"].add((ambito, anio, computo))
+    if estado == "confirmado":
+        resumen["confirmados"].append((ambito, anio, computo))
 
 
 def _recolectar_local(cal, modulo, anio, version, resumen, registro):
@@ -113,8 +142,7 @@ def _recolectar_local(cal, modulo, anio, version, resumen, registro):
             cal, extraidos, computo, anio, version, fuente_id, resumen,
             alcance=[modulo.AMBITO],
         )
-        cal.fijar_cobertura(modulo.AMBITO, anio, computo, "confirmado", version, fuente_id)
-        resumen["confirmados"].append((modulo.AMBITO, anio, computo))
+        _declarar(cal, resumen, modulo.AMBITO, anio, computo, "confirmado", version, fuente_id)
     registro(
         f"  · {len(extraidos)} fiestas locales: "
         + ", ".join(f"{f} {n}" for _, f, n in extraidos)
@@ -132,7 +160,7 @@ def _recolectar_boe(cal, anio, computo, version, resumen, registro, laborales):
         estado = "sin_publicar"
         registro(f"  · sin publicar todavía")
         for ambito in _ambitos_que_cubre(computo):
-            cal.fijar_cobertura(ambito, anio, computo, estado, version)
+            _declarar(cal, resumen, ambito, anio, computo, estado, version)
         return
 
     crudo, arbol = boe.descargar_xml(hallazgo["url_xml"])
@@ -160,8 +188,7 @@ def _recolectar_boe(cal, anio, computo, version, resumen, registro, laborales):
         alcance=_ambitos_que_cubre(computo),
     )
     for ambito in _ambitos_que_cubre(computo):
-        cal.fijar_cobertura(ambito, anio, computo, "confirmado", version, fuente_id)
-        resumen["confirmados"].append((ambito, anio, computo))
+        _declarar(cal, resumen, ambito, anio, computo, "confirmado", version, fuente_id)
     registro(f"  · {len(extraidos)} festivos")
 
 
@@ -222,13 +249,10 @@ def _marcar_lo_no_leido(cal, anios, version, resumen, registro):
     municipios = list(fuentes.MUNICIPIOS) + list(fuentes.ISLAS)
     for anio in anios:
         for computo in COMPUTOS:
-            for ambito in municipios:
-                # Lo ya confirmado por un extractor local no se pisa.
-                if (ambito, anio, computo) not in resumen["confirmados"]:
-                    cal.fijar_cobertura(ambito, anio, computo, "pendiente", version)
-            for ambito in ambitos_sin_leer:
-                if (ambito, anio, computo) not in resumen["confirmados"]:
-                    cal.fijar_cobertura(ambito, anio, computo, "pendiente", version)
+            for ambito in municipios + ambitos_sin_leer:
+                # Solo lo que nadie ha dictaminado ya en esta pasada.
+                if (ambito, anio, computo) not in resumen["declarados"]:
+                    _declarar(cal, resumen, ambito, anio, computo, "pendiente", version)
     registro(
         f"{len(sin_extractor)} publicaciones registradas sin extractor todavía; "
         f"{len(municipios)} municipios e islas sin festivos locales."
