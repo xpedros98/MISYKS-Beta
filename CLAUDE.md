@@ -38,12 +38,12 @@ python -m sec.mail mover ID CARPETA
 `conectar` necesita un `client_id` en `~/.misyks/config` (`INSTALACION.md`).
 
 ```bash
-python -m pro.calendario recolectar [AÑO...]    # Lee los boletines y llena el calendario
-python -m pro.calendario semilla                # Carga los festivos locales anotados a mano
-python -m pro.calendario comprobar URL [TEXTO]  # Por qué no se puede leer una fuente
-python -m pro.calendario estado                 # Qué ámbitos están confirmados y cuáles no
-python -m pro.calendario festivos ÁMBITO [AÑO]  # Días inhábiles de un sitio, por cómputo
-python -m pro.calendario calendario ÁMBITO [AÑO] # El año entero en rejilla, para mirarlo a ojo
+python -m pro.calendario recolectar [AÑO...]     # Lee los boletines y llena el calendario
+python -m pro.calendario semilla                 # Carga los festivos locales anotados a mano
+python -m pro.calendario comprobar URL [TEXTO]   # Por qué no se puede leer una fuente
+python -m pro.calendario estado                  # Qué hay, qué falta y qué ha fallado
+python -m pro.calendario festivos ÁMBITO [AÑO]   # Días inhábiles de un sitio, por cómputo
+python -m pro.calendario calendario ÁMBITO [AÑO] # El año en rejilla, para mirarlo a ojo
 ```
 
 `recolectar` sin años usa la ventana deslizante (el año en curso y el siguiente) y
@@ -51,6 +51,24 @@ necesita red: descarga del BOE. No pide credenciales, solo lee dato público. Oj
 `pro.calendario` **todavía no calcula plazos**, solo mantiene el calendario del que
 se alimentará el motor. El proceso para añadir un municipio nuevo está en
 `RECOLECCION.md`, escrito para personas del equipo.
+
+En `estado`, la columna **FALLIDO** es la única que pide actuar: significa que se
+intentó leer una fuente y reventó. `sin leer` es que aún no hay extractor para
+ella, y `sin publicar`, que el boletín no ha sacado ese año todavía. Los tres dan
+fecha prudente por igual; la distinción es para mantenimiento, no para el motor.
+
+**Dónde viven los datos.** Las dos bases están en `~/.misyks/`, fuera del repo:
+`sec_mail.db` (SQLCipher, con clave en `~/.misyks/config`) y `calendario.db`
+(SQLite a secas, sin clave, porque los festivos son dato público). `recolectar`
+tarda un par de minutos y va escribiendo; para mirar la base **mientras corre**,
+hay que abrirla en solo lectura o se choca con el escritor:
+
+```bash
+python -c "import sqlite3,pathlib;p=pathlib.Path.home()/'.misyks/calendario.db';c=sqlite3.connect(f'file:{p.as_posix()}?mode=ro',uri=True);print(c.execute('SELECT count(*) FROM festivos').fetchone()[0],'festivos')"
+```
+
+En la consola de Windows, `python -X utf8 -m ...` evita que las tildes salgan
+como interrogantes; no cambia lo que se guarda, solo lo que se ve.
 
 Frontend (desde `Frontend/`): `cargo run`, `cargo build`, `cargo clippy`.
 
