@@ -56,7 +56,7 @@ Detallada en ARQUITECTURA.md.
 
 ## Agentes
 
-AGENTES.md lista los agentes: solo incluye información de para qué sirve cada uno y
+AGENTES.md lista los agentes: solo incluye información de dójnde corre, para qué sirve cada uno y
 sus restricciones. Esas restricciones son invariantes, no estilo: al romperlas, el
 código sigue compilando y aparentemente funcionando.
 
