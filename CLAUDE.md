@@ -46,11 +46,6 @@ python -m pro.calendario festivos ÁMBITO [AÑO]   # Días inhábiles de un siti
 python -m pro.calendario calendario ÁMBITO [AÑO] # El año en rejilla, para mirarlo a ojo
 ```
 
-`recolectar` necesita red y no pide credenciales: solo lee dato público. **`pro.calendario`
-todavía no calcula plazos**, solo mantiene el calendario del que se alimentará el motor;
-cómo leer su estado está en AGENTES.md y el proceso para añadir un municipio, en
-`RECOLECCION.md`.
-
 Frontend (desde `Frontend/`): `cargo run`, `cargo build`, `cargo clippy`.
 
 No hay suite de tests ni linter configurados todavía; no inventes órdenes de test.
@@ -63,8 +58,7 @@ Detallada en ARQUITECTURA.md.
 
 AGENTES.md lista los agentes: solo incluye información de para qué sirve cada uno y
 sus restricciones. Esas restricciones son invariantes, no estilo: al romperlas, el
-código sigue compilando y aparentemente funcionando. Ahí está también dónde corre
-cada agente.
+código sigue compilando y aparentemente funcionando.
 
 ## Historial
 
