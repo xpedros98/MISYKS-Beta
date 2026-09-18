@@ -53,7 +53,13 @@ pub struct Hito {
     /// esperar de su fecha, no como se pinta.
     pub clase: String,
     pub norma: Option<String>,
-    pub ocurrido: bool,
+    /// `pendiente` · `ocurrido` · `en_pausa` · `cancelado`. `vencido` no esta
+    /// aqui porque no se guarda: se calcula al leer (ver la consulta).
+    pub estado: String,
+    /// `acuse` (hay justificante: consta) o `abogado` (lo dice quien lo hizo por
+    /// su cuenta, fuera del sistema). Vacio mientras no este hecho.
+    pub cerrado_por: Option<String>,
+    pub vencido: bool,
     pub fecha: Option<String>,
     /// `real` · `limite` · `provisional` · `sin_senalar`. **Esto** es lo que
     /// decide como se pinta: «2 de octubre» como tope propio y «2 de octubre»
@@ -64,6 +70,26 @@ pub struct Hito {
 }
 
 impl Hito {
+    pub fn ocurrido(&self) -> bool {
+        self.estado == "ocurrido"
+    }
+
+    /// Como se lee el estado del nodo debajo de su fecha.
+    ///
+    /// Un hito hecho dice **quien** lo dio por hecho, no solo que lo esta: es la
+    /// diferencia entre lo que consta y lo que alguien ha dicho, y en un
+    /// expediente esa diferencia puede importar mucho despues.
+    pub fn nota(&self) -> String {
+        match (self.estado.as_str(), self.cerrado_por.as_deref()) {
+            ("ocurrido", Some("acuse")) => "hecho · acreditado".to_string(),
+            ("ocurrido", _) => "hecho · lo dice el abogado".to_string(),
+            ("en_pausa", _) => "en pausa".to_string(),
+            ("cancelado", _) => "cancelado".to_string(),
+            _ if self.vencido => "VENCIDO".to_string(),
+            _ => String::new(),
+        }
+    }
+
     /// Como se lee la fecha debajo del nodo.
     ///
     /// Un senalamiento sin fecha **no es un hueco**: es que el juzgado no lo ha
@@ -221,7 +247,17 @@ pub fn hitos(expediente_id: i64) -> Result<Vec<Hito>, ExpedientesError> {
 
     let mut stmt = conn
         .prepare(
-            "SELECT orden, nombre, clase, norma, estado, fecha, clase_fecha, revisado
+            // `vencido` se calcula aqui, en la consulta, porque en la base no
+            // esta: guardarlo seria dar un plazo por muerto por escrito. Las
+            // condiciones son las del Backend (`vida_efectiva`): solo vence un
+            // plazo pendiente con fecha firme.
+            "SELECT orden, nombre, clase, norma, estado, fecha, clase_fecha, revisado,
+                    cerrado_por,
+                    CASE WHEN estado = 'pendiente' AND clase = 'limite'
+                              AND clase_fecha = 'limite'
+                              AND fecha IS NOT NULL
+                              AND fecha < date('now', 'localtime')
+                         THEN 1 ELSE 0 END AS vencido
              FROM hitos WHERE expediente_id = ?1 ORDER BY orden",
         )
         .map_err(|e| ExpedientesError::Sqlite(e.to_string()))?;
@@ -233,10 +269,12 @@ pub fn hitos(expediente_id: i64) -> Result<Vec<Hito>, ExpedientesError> {
                 nombre: row.get(1)?,
                 clase: row.get(2)?,
                 norma: row.get(3)?,
-                ocurrido: row.get::<_, String>(4)? == "ocurrido",
+                estado: row.get(4)?,
                 fecha: row.get(5)?,
                 clase_fecha: row.get(6)?,
                 revisado: row.get::<_, i64>(7)? != 0,
+                cerrado_por: row.get(8)?,
+                vencido: row.get::<_, i64>(9)? != 0,
             })
         })
         .map_err(|e| ExpedientesError::Sqlite(e.to_string()))?;
@@ -249,6 +287,25 @@ pub fn hitos(expediente_id: i64) -> Result<Vec<Hito>, ExpedientesError> {
 /// Abre un expediente del tipo indicado. La referencia la pone el Backend.
 pub fn abrir(tipo: &str) -> Result<String, ExpedientesError> {
     backend::ejecutar("expedientes", &["abrir", tipo]).map_err(ExpedientesError::Backend)
+}
+
+/// Marca un hito como realizado. Lo da por hecho **el abogado**, que es quien
+/// sabe si lo hizo: `--por acuse` queda para cuando exista `pro.acuse`.
+pub fn hito_hecho(expediente_id: i64, orden: i64) -> Result<String, ExpedientesError> {
+    backend::ejecutar(
+        "expedientes",
+        &["hecho", &expediente_id.to_string(), &orden.to_string()],
+    )
+    .map_err(ExpedientesError::Backend)
+}
+
+/// Deshace el marcado de un hito.
+pub fn hito_deshacer(expediente_id: i64, orden: i64) -> Result<String, ExpedientesError> {
+    backend::ejecutar(
+        "expedientes",
+        &["deshacer", &expediente_id.to_string(), &orden.to_string()],
+    )
+    .map_err(ExpedientesError::Backend)
 }
 
 /// Borra **todos** los expedientes, sin dejar rastro.

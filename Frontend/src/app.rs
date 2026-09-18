@@ -1,6 +1,6 @@
 use iced::widget::{button, column, row};
-use iced::Length;
 use iced::Element;
+use iced::{Length, Task};
 
 use crate::expedientes::TipoDoc;
 use crate::screens::calendario::CalendarioState;
@@ -45,12 +45,15 @@ impl Default for State {
 pub enum Message {
     NavigateTo(Screen),
     ConectarCuenta(String),
+    CuentaConectada(Result<String, SecMailError>),
     DesconectarCuenta(String),
     RefrescarSecretario,
     CalendarioAmbito(String),
     CalendarioComputo(usize),
     ExpedienteTipo(TipoDoc),
     ExpedienteAbrir(i64),
+    HitoHecho(i64, i64),
+    HitoDeshacer(i64, i64),
     ExpedienteCerrarDetalle,
     ExpedienteCrear,
     ExpedienteEliminar(i64),
@@ -61,16 +64,19 @@ pub enum Message {
     ExpedienteVaciarCancelar,
 }
 
-pub fn update(state: &mut State, message: Message) {
+/// `update` devuelve una `Task` porque conectar una cuenta **no puede
+/// bloquear**: espera a que una persona acepte en el navegador, y eso tarda lo
+/// que tarda. Todo lo demas sigue siendo sincrono y devuelve `Task::none()`.
+pub fn update(state: &mut State, message: Message) -> Task<Message> {
     match message {
         Message::NavigateTo(screen) => state.current_screen = screen,
         Message::ConectarCuenta(proveedor) => {
-            // Bloqueante, y aqui se nota mas que antes: el consentimiento
-            // depende de que una persona acepte en el navegador, no de una
-            // llamada de red que tarda un segundo. Es el candidato numero uno
-            // a Task async; se deja sincrono mientras la app sea de un solo
-            // usuario y esta pantalla no tenga nada mas que hacer entretanto.
-            state.settings.conectar(&proveedor);
+            // Devuelve ya, con la pantalla diciendo que mire el navegador; la
+            // respuesta llega luego como `CuentaConectada`.
+            return state.settings.conectar(&proveedor);
+        }
+        Message::CuentaConectada(resultado) => {
+            state.settings.conectada(resultado);
             if state.settings.hay_cuenta() {
                 sincronizar_y_recargar(state);
             }
@@ -81,6 +87,10 @@ pub fn update(state: &mut State, message: Message) {
         Message::CalendarioComputo(computo) => state.calendario.cambiar_computo(computo),
         Message::ExpedienteTipo(tipo) => state.expedientes.elegir_tipo(tipo),
         Message::ExpedienteAbrir(id) => state.expedientes.abrir_detalle(id),
+        Message::HitoHecho(expediente, orden) => state.expedientes.marcar_hito(expediente, orden),
+        Message::HitoDeshacer(expediente, orden) => {
+            state.expedientes.deshacer_hito(expediente, orden)
+        }
         Message::ExpedienteCerrarDetalle => state.expedientes.cerrar_detalle(),
         Message::ExpedienteCrear => state.expedientes.crear(),
         Message::ExpedienteEliminar(id) => state.expedientes.eliminar(id),
@@ -88,6 +98,7 @@ pub fn update(state: &mut State, message: Message) {
         Message::ExpedienteVaciarConfirmar => state.expedientes.vaciar(),
         Message::ExpedienteVaciarCancelar => state.expedientes.cancelar_vaciado(),
     }
+    Task::none()
 }
 
 fn sincronizar_y_recargar(state: &mut State) {

@@ -57,6 +57,28 @@ impl ExpedientesState {
         self.detalle = None;
     }
 
+    pub fn marcar_hito(&mut self, expediente_id: i64, orden: i64) {
+        self.aviso = Some(expedientes::hito_hecho(expediente_id, orden));
+        self.recargar_detalle(expediente_id);
+    }
+
+    pub fn deshacer_hito(&mut self, expediente_id: i64, orden: i64) {
+        self.aviso = Some(expedientes::hito_deshacer(expediente_id, orden));
+        self.recargar_detalle(expediente_id);
+    }
+
+    /// Relee los hitos del expediente abierto. El estado vive en la base, no
+    /// aqui: tras cambiarlo hay que volver a preguntarlo, no adivinarlo.
+    fn recargar_detalle(&mut self, expediente_id: i64) {
+        if let Some((expediente, _)) = &self.detalle {
+            if expediente.id == expediente_id {
+                let hitos = expedientes::hitos(expediente_id).unwrap_or_default();
+                let expediente = expediente.clone();
+                self.detalle = Some((expediente, hitos));
+            }
+        }
+    }
+
     pub fn elegir_tipo(&mut self, tipo: TipoDoc) {
         self.seleccion = Some(tipo);
         self.aviso = None;

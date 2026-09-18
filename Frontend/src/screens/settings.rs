@@ -31,6 +31,10 @@ pub struct SettingsState {
 pub enum EstadoGuardado {
     #[default]
     Ninguno,
+    /// Mientras se espera al navegador. Es el estado que faltaba: sin él, entre
+    /// pulsar y volver no había **nada** en pantalla, y una espera que puede
+    /// durar minutos sin señal es indistinguible de un botón roto.
+    Conectando(String),
     Conectado(String),
     Error(String),
 }
@@ -57,10 +61,20 @@ impl SettingsState {
         }
     }
 
-    /// Abre el navegador y espera al consentimiento. Bloqueante: puede tardar
-    /// minutos, porque depende de que una persona acepte en otra ventana.
-    pub fn conectar(&mut self, proveedor: &str) {
-        self.estado = match secretario::conectar(proveedor) {
+    /// Arranca la conexión y deja la pantalla diciendo qué está pasando.
+    ///
+    /// No espera aquí: devuelve la tarea que esperará por su cuenta, y la
+    /// respuesta llega después como `Message::CuentaConectada`. Lo que se gana
+    /// no es velocidad, es que se vea algo: la persona tiene que saber que le
+    /// toca mirar el navegador.
+    pub fn conectar(&mut self, proveedor: &str) -> iced::Task<crate::app::Message> {
+        self.estado = EstadoGuardado::Conectando(proveedor.to_string());
+        secretario::conectar_async(proveedor.to_string()).map(crate::app::Message::CuentaConectada)
+    }
+
+    /// Recoge el resultado de la conexión cuando el navegador ya ha contestado.
+    pub fn conectada(&mut self, resultado: Result<String, secretario::SecMailError>) {
+        self.estado = match resultado {
             Ok(salida) => EstadoGuardado::Conectado(salida),
             Err(e) => EstadoGuardado::Error(e.to_string()),
         };
@@ -109,8 +123,13 @@ pub fn view(state: &SettingsState) -> Element<'_, Message> {
             _ => "sin conectar".to_string(),
         };
 
+        let conectando = matches!(&state.estado, EstadoGuardado::Conectando(_));
         let accion = if conectado {
             button("Desconectar").on_press(Message::DesconectarCuenta(proveedor.to_string()))
+        } else if conectando {
+            // Sin `on_press` el boton queda muerto: dos consentimientos a la vez
+            // abren dos navegadores y solo uno guarda el token.
+            button("Conectando...")
         } else {
             button("Conectar cuenta").on_press(Message::ConectarCuenta(proveedor.to_string()))
         };
@@ -127,6 +146,21 @@ pub fn view(state: &SettingsState) -> Element<'_, Message> {
 
     let mensaje: Element<'_, Message> = match &state.estado {
         EstadoGuardado::Ninguno => text("").into(),
+        // Dice dónde hay que mirar, no solo que se está esperando: el navegador
+        // puede haberse abierto detrás de esta ventana.
+        EstadoGuardado::Conectando(proveedor) => column![
+            text(format!(
+                "Abriendo el navegador para conectar {}...",
+                etiqueta(proveedor)
+            )),
+            text(
+                "Si no lo ves, buscalo detras de esta ventana: elige la cuenta y \
+                 acepta los permisos. Esta pantalla se actualizara sola."
+            )
+            .size(12),
+        ]
+        .spacing(4)
+        .into(),
         EstadoGuardado::Conectado(s) => text(s.clone()).into(),
         EstadoGuardado::Error(e) => text(e.clone()).into(),
     };

@@ -861,6 +861,18 @@ casos, mismos días y mismas lagunas-- pero eso es una comprobación puntual, no
 mecanismo; si el acoplamiento crece, la alternativa es que el frontend pida los datos
 por la CLI.
 
+**Conectar cuenta ya no bloquea la ventana.** Era el último bloqueo síncrono dentro de
+`update`, y el peor: espera a que una persona elija cuenta en el navegador, hasta cinco
+minutos. Mientras tanto el bucle de eventos de `iced` estaba parado, la ventana no
+repintaba y el navegador podía abrirse **detrás** de ella; desde fuera parecía que el
+botón no hacía nada, y así se vio en macOS. Ahora `update` devuelve `Task`, el
+consentimiento corre en un hilo aparte —es una espera bloqueante de un subproceso, no
+trabajo asíncrono: meterlo en el ejecutor ocuparía un hilo igual, disimulado— y la
+pantalla dice **«Abriendo el navegador… si no lo ves, búscalo detrás de esta
+ventana»**. El botón queda muerto mientras tanto: dos consentimientos a la vez abren dos
+navegadores y solo uno guarda el token. `Refrescar` sigue siendo síncrono, pero eso
+tarda medio segundo, no minutos.
+
 Frontend (`iced`): botón **Refrescar** en la pantalla Secretario invoca
 `sincronizar --limite 5` como subproceso y recarga la lista. Ajustes ya no tiene
 campos de texto sino **Conectar cuenta** por proveedor, con el estado de cada una;
@@ -956,9 +968,6 @@ Del paso a OAuth:
 - **Una cuenta por proveedor.** El esquema ya guarda `cuenta` en cada correo, pero
   `config` elige un único proveedor activo: varias cuentas a la vez no están
   resueltas.
-- **El consentimiento bloquea la interfaz.** Conectar una cuenta desde Ajustes lanza
-  un subproceso síncrono que espera a que alguien acepte en el navegador. Es el
-  candidato más claro a `Task` asíncrona de `iced`.
 - **Adaptador del tercer mundo: no existe, y ya no hay esqueleto.** `imap.py` se ha
   borrado. No lo importaba nadie —`correo.abrir()` solo conoce `google` y
   `microsoft`— y lo que contenía era el Gmail de antes de OAuth: host fijo
@@ -1210,7 +1219,9 @@ Decisiones que conviene no perder:
 - **Los expedientes abiertos antes de que existiera la tabla `hitos` no tienen
   ninguno**, y no se les añaden solos: la pantalla los enseña como un tipo sin
   recorrido escrito.
-- **Poner fechas solo se puede por CLI.** La pantalla enseña la barra; no deja tocarla.
+- **Poner fechas solo se puede por CLI.** La pantalla enseña la barra y deja **marcar un
+  nodo como hecho** (y deshacerlo), que es lo que el abogado necesita a diario; poner o
+  corregir una fecha, pausar y cancelar siguen siendo de la CLI.
 - **Nada cuelga todavía del expediente**: ni documentos, ni correos, ni los eventos de
   `sec.agenda`, que ya tiene la columna `expediente` sin rellenar.
 - **Sin partes ni órgano desde la interfaz.** La base los guarda; la pantalla solo pide
