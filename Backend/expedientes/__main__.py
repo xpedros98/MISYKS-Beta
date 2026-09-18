@@ -5,6 +5,11 @@
     python -m expedientes listar [--todos]        los abiertos, o todos
     python -m expedientes hitos ID                por dónde pasa: la barra, en texto
     python -m expedientes fechar ID ORDEN FECHA [--clase real|limite|provisional] [--ocurrido]
+    python -m expedientes hecho ID HITO [--fecha F]   el abogado lo hizo por su cuenta
+    python -m expedientes deshacer ID HITO           deshace un «hecho» dado sin querer
+    python -m expedientes pausar ID HITO MOTIVO      suspende un plazo
+    python -m expedientes reanudar ID HITO [FECHA]   lo reanuda con la fecha recalculada
+    python -m expedientes cancelar ID HITO MOTIVO    lo cancela; nunca se borra
     python -m expedientes cerrar ID               lo saca de los abiertos, sin borrarlo
     python -m expedientes eliminar ID --si        lo borra de verdad
     python -m expedientes vaciar --si             los borra todos
@@ -20,6 +25,7 @@ from sec.cuentas import consola
 
 from .agent import Expedientes
 from .catalogo import ARQUETIPOS
+from .db import vida_efectiva
 
 
 def main():
@@ -52,6 +58,31 @@ def main():
     s.add_argument("--clase", choices=("real", "limite", "provisional", "sin_senalar"),
                    default="real")
     s.add_argument("--ocurrido", action="store_true", help="darlo por cumplido")
+
+    s = sub.add_parser("hecho", help="marca un hito como realizado")
+    s.add_argument("id", type=int)
+    s.add_argument("hito", type=int)
+    s.add_argument("--fecha", default=None, help="fecha del hecho; por defecto, hoy")
+    s.add_argument("--por", choices=("abogado", "acuse"), default="abogado")
+
+    s = sub.add_parser("deshacer", help="deshace el marcado de un hito")
+    s.add_argument("id", type=int)
+    s.add_argument("hito", type=int)
+
+    s = sub.add_parser("pausar", help="suspende un plazo por un hecho registrado")
+    s.add_argument("id", type=int)
+    s.add_argument("hito", type=int)
+    s.add_argument("motivo")
+
+    s = sub.add_parser("reanudar", help="reanuda un plazo pausado")
+    s.add_argument("id", type=int)
+    s.add_argument("hito", type=int)
+    s.add_argument("fecha", nargs="?", default=None)
+
+    s = sub.add_parser("cancelar", help="cancela un hito por un motivo registrado")
+    s.add_argument("id", type=int)
+    s.add_argument("hito", type=int)
+    s.add_argument("motivo")
 
     s = sub.add_parser("cerrar", help="cierra un expediente sin borrarlo")
     s.add_argument("id", type=int)
@@ -110,15 +141,43 @@ def ejecutar(args):
                 print("Este tipo no tiene plantilla de hitos escrita todavía "
                       "(hay 5 de 89, en datos/hitos.csv).")
             for h in filas:
-                marca = "[x]" if h["estado"] == "ocurrido" else "[ ]"
+                vida = vida_efectiva(h)
+                marca = {"ocurrido": "[x]", "en_pausa": "[=]",
+                         "cancelado": "[-]", "vencido": "[!]"}.get(vida, "[ ]")
                 fecha = h["fecha"] or ("sin señalar" if h["clase"] == "senalamiento" else "—")
                 clase = f"({h['clase_fecha']})" if h["clase_fecha"] else ""
+                # Quién lo dio por hecho importa tanto como que esté hecho.
+                quien = ""
+                if h["estado"] == "ocurrido":
+                    quien = "  · acreditado" if h["cerrado_por"] == "acuse" else "  · declarado"
+                elif vida == "vencido":
+                    quien = "  · VENCIDO"
+                elif h["motivo"]:
+                    quien = f"  · {h['motivo']}"
                 borrador = "" if h["revisado"] else "  · sin revisar"
                 print(f"{marca} {h['orden']}. {h['nombre']:<44}  {fecha:<12} {clase:<14}"
-                      f"  {h['norma'] or ''}{borrador}")
+                      f"  {h['norma'] or ''}{quien}{borrador}")
         elif args.orden == "fechar":
             expedientes.fechar(args.id, args.hito, args.fecha, args.clase, args.ocurrido)
             print(f"Hito {args.hito} del expediente {args.id}: {args.fecha} ({args.clase}).")
+        elif args.orden == "hecho":
+            h = expedientes.hecho(args.id, args.hito, args.fecha, args.por)
+            como = "acreditado, con justificante" if args.por == "acuse" else (
+                "declarado por el abogado, sin justificante")
+            print(f"Hito {args.hito} ({h['nombre']}) realizado el {h['cerrado_en']}: {como}.")
+        elif args.orden == "deshacer":
+            h = expedientes.deshacer(args.id, args.hito)
+            print(f"Hito {args.hito} ({h['nombre']}) vuelve a estar pendiente.")
+        elif args.orden == "pausar":
+            h = expedientes.pausar(args.id, args.hito, args.motivo)
+            print(f"Hito {args.hito} ({h['nombre']}) en pausa: {args.motivo}.")
+        elif args.orden == "reanudar":
+            h = expedientes.reanudar(args.id, args.hito, args.fecha)
+            nueva = f" con fecha {args.fecha}" if args.fecha else " sin fecha nueva"
+            print(f"Hito {args.hito} ({h['nombre']}) reanudado{nueva}.")
+        elif args.orden == "cancelar":
+            h = expedientes.cancelar(args.id, args.hito, args.motivo)
+            print(f"Hito {args.hito} ({h['nombre']}) cancelado: {args.motivo}.")
         elif args.orden == "cerrar":
             expedientes.cerrar_expediente(args.id)
             print(f"Expediente {args.id} cerrado. Sigue estando; no aparece en los abiertos.")

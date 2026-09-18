@@ -57,6 +57,11 @@ python -m expedientes tipos                      # Los 89 tipos documentales del
 python -m expedientes abrir TIPO [--titulo T]    # Abre un expediente; la referencia la pone él
 python -m expedientes listar [--todos]           # Los abiertos, o también los cerrados
 python -m expedientes hitos ID                   # Por dónde pasa el caso: la barra, en texto
+python -m expedientes hecho ID HITO [--fecha F]  # El abogado lo hizo por su cuenta
+python -m expedientes deshacer ID HITO           # Deshace un «hecho» dado sin querer
+python -m expedientes pausar ID HITO MOTIVO      # Suspende un plazo
+python -m expedientes reanudar ID HITO [FECHA]   # Lo reanuda con la fecha recalculada fuera
+python -m expedientes cancelar ID HITO MOTIVO    # Lo cancela; nunca se borra
 python -m expedientes fechar ID ORDEN FECHA      # Pone fecha a un hito (--clase, --ocurrido)
 python -m expedientes cerrar ID                  # Lo saca de los abiertos sin borrarlo
 python -m expedientes eliminar ID --si           # Lo borra de verdad
@@ -72,12 +77,6 @@ python -m sec.agenda agenda [--desde F --hasta F] # Reuniones, vistas, plazos y 
 python -m sec.agenda colisiones                  # Compromisos que se pisan
 python -m sec.agenda apuntar TITULO FECHA        # Un compromiso propio (reunión, obligación)
 python -m sec.agenda clasificar ID --tipo TIPO   # Dice si aquel evento era una vista o un café
-python -m sec.agenda plazo ID FECHA ASUNTO       # Anota un plazo YA calculado (lo hará procesal)
-python -m sec.agenda hecho ID [--fecha F]        # Lo presentó él, fuera de MISYKS: cumplido
-python -m sec.agenda deshacer ID                 # Deshace un «Hecho» dado sin querer
-python -m sec.agenda pausar ID MOTIVO            # Suspende el plazo (conciliación previa...)
-python -m sec.agenda reanudar ID [FECHA]         # Lo reanuda con la fecha ya recalculada fuera
-python -m sec.agenda cancelar ID MOTIVO          # Lo cancela; nunca se borra
 python -m sec.agenda publicar ID                 # Escribe en el calendario del abogado, a petición
 python -m sec.agenda acciones [N]                # Qué se ha hecho sobre cada evento
 ```
