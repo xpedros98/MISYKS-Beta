@@ -59,6 +59,9 @@ pub struct Hito {
     /// `acuse` (hay justificante: consta) o `abogado` (lo dice quien lo hizo por
     /// su cuenta, fuera del sistema). Vacio mientras no este hecho.
     pub cerrado_por: Option<String>,
+    /// Referencia de la resolucion que amplio el plazo, si lo amplio. Una fecha
+    /// prorrogada la movio el organo, no nosotros, y eso se ensena.
+    pub prorroga: Option<String>,
     pub vencido: bool,
     pub fecha: Option<String>,
     /// `real` · `limite` · `provisional` · `sin_senalar`. **Esto** es lo que
@@ -86,7 +89,10 @@ impl Hito {
             ("en_pausa", _) => "en pausa".to_string(),
             ("cancelado", _) => "cancelado".to_string(),
             _ if self.vencido => "VENCIDO".to_string(),
-            _ => String::new(),
+            _ => match &self.prorroga {
+                Some(resolucion) => format!("prorrogado · {resolucion}"),
+                None => String::new(),
+            },
         }
     }
 
@@ -252,7 +258,7 @@ pub fn hitos(expediente_id: i64) -> Result<Vec<Hito>, ExpedientesError> {
             // condiciones son las del Backend (`vida_efectiva`): solo vence un
             // plazo pendiente con fecha firme.
             "SELECT orden, nombre, clase, norma, estado, fecha, clase_fecha, revisado,
-                    cerrado_por,
+                    cerrado_por, prorroga,
                     CASE WHEN estado = 'pendiente' AND clase = 'limite'
                               AND clase_fecha = 'limite'
                               AND fecha IS NOT NULL
@@ -274,7 +280,8 @@ pub fn hitos(expediente_id: i64) -> Result<Vec<Hito>, ExpedientesError> {
                 clase_fecha: row.get(6)?,
                 revisado: row.get::<_, i64>(7)? != 0,
                 cerrado_por: row.get(8)?,
-                vencido: row.get::<_, i64>(9)? != 0,
+                prorroga: row.get(9)?,
+                vencido: row.get::<_, i64>(10)? != 0,
             })
         })
         .map_err(|e| ExpedientesError::Sqlite(e.to_string()))?;

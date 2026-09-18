@@ -61,7 +61,9 @@ python -m expedientes hecho ID HITO [--fecha F]  # El abogado lo hizo por su cue
 python -m expedientes deshacer ID HITO           # Deshace un «hecho» dado sin querer
 python -m expedientes pausar ID HITO MOTIVO      # Suspende un plazo
 python -m expedientes reanudar ID HITO [FECHA]   # Lo reanuda con la fecha recalculada fuera
+python -m expedientes prorrogar ID HITO FECHA    # El órgano amplia el plazo (--resolucion)
 python -m expedientes cancelar ID HITO MOTIVO    # Lo cancela; nunca se borra
+python -m expedientes acciones ID [N]            # Por qué las fechas son las que son
 python -m expedientes fechar ID ORDEN FECHA      # Pone fecha a un hito (--clase, --ocurrido)
 python -m expedientes cerrar ID                  # Lo saca de los abiertos sin borrarlo
 python -m expedientes eliminar ID --si           # Lo borra de verdad

@@ -9,7 +9,9 @@
     python -m expedientes deshacer ID HITO           deshace un «hecho» dado sin querer
     python -m expedientes pausar ID HITO MOTIVO      suspende un plazo
     python -m expedientes reanudar ID HITO [FECHA]   lo reanuda con la fecha recalculada
+    python -m expedientes prorrogar ID HITO FECHA [--resolucion R]   lo amplía el órgano
     python -m expedientes cancelar ID HITO MOTIVO    lo cancela; nunca se borra
+    python -m expedientes acciones ID [N]            por qué las fechas son las que son
     python -m expedientes cerrar ID               lo saca de los abiertos, sin borrarlo
     python -m expedientes eliminar ID --si        lo borra de verdad
     python -m expedientes vaciar --si             los borra todos
@@ -78,6 +80,16 @@ def main():
     s.add_argument("id", type=int)
     s.add_argument("hito", type=int)
     s.add_argument("fecha", nargs="?", default=None)
+
+    s = sub.add_parser("prorrogar", help="el órgano amplía el plazo de un hito")
+    s.add_argument("id", type=int)
+    s.add_argument("hito", type=int)
+    s.add_argument("fecha", help="la fecha nueva, la que concede la resolución")
+    s.add_argument("--resolucion", default=None, help="referencia de la resolución que la concede")
+
+    s = sub.add_parser("acciones", help="qué le ha pasado al expediente")
+    s.add_argument("id", type=int)
+    s.add_argument("n", nargs="?", type=int, default=30)
 
     s = sub.add_parser("cancelar", help="cancela un hito por un motivo registrado")
     s.add_argument("id", type=int)
@@ -152,6 +164,8 @@ def ejecutar(args):
                     quien = "  · acreditado" if h["cerrado_por"] == "acuse" else "  · declarado"
                 elif vida == "vencido":
                     quien = "  · VENCIDO"
+                elif h["prorroga"]:
+                    quien = f"  · prorrogado ({h['prorroga']})"
                 elif h["motivo"]:
                     quien = f"  · {h['motivo']}"
                 borrador = "" if h["revisado"] else "  · sin revisar"
@@ -175,6 +189,17 @@ def ejecutar(args):
             h = expedientes.reanudar(args.id, args.hito, args.fecha)
             nueva = f" con fecha {args.fecha}" if args.fecha else " sin fecha nueva"
             print(f"Hito {args.hito} ({h['nombre']}) reanudado{nueva}.")
+        elif args.orden == "prorrogar":
+            h = expedientes.prorrogar(args.id, args.hito, args.fecha, args.resolucion)
+            print(f"Hito {args.hito} ({h['nombre']}) prorrogado hasta {args.fecha}"
+                  f"{' por ' + args.resolucion if args.resolucion else ''}.")
+        elif args.orden == "acciones":
+            filas = expedientes.acciones(args.id, args.n)
+            if not filas:
+                print("Todavía no le ha pasado nada a este expediente.")
+            for a in filas:
+                hito = f"hito {a['orden']}" if a["orden"] else "expediente"
+                print(f"{a['fecha'][:16]}  {hito:<10}  {a['accion']:<16}  {a['detalle'] or ''}")
         elif args.orden == "cancelar":
             h = expedientes.cancelar(args.id, args.hito, args.motivo)
             print(f"Hito {args.hito} ({h['nombre']}) cancelado: {args.motivo}.")

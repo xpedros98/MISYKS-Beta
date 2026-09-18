@@ -55,6 +55,21 @@ class Expedientes:
         """Reanuda un plazo pausado con la fecha ya recalculada fuera."""
         return self.db.reanudar_hito(expediente_id, orden, fecha)
 
+    def prorrogar(self, expediente_id, orden, nueva_fecha, resolucion=None):
+        """El órgano amplía el plazo. Distinto de pausar y de recalcular.
+
+        La fecha viene en una resolución, no de una regla nuestra, así que
+        aquí tampoco se computa nada: se guarda la que llega y se anota de
+        dónde sale.
+        """
+        return self.db.prorrogar_hito(expediente_id, orden, nueva_fecha, resolucion)
+
+    def acciones(self, expediente_id, limite=100):
+        """Todo lo que le ha pasado al expediente, para explicar una fecha."""
+        if self.db.expediente(expediente_id) is None:
+            raise LookupError(f"No hay ningún expediente con id {expediente_id}.")
+        return self.db.acciones(expediente_id, limite)
+
     def cancelar(self, expediente_id, orden, motivo):
         """Cancela el hito por un motivo registrado. Nunca se borra."""
         return self.db.cancelar_hito(expediente_id, orden, motivo)

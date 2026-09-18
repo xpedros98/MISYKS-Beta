@@ -1224,6 +1224,19 @@ Decisiones que conviene no perder:
 - **`documento_id` está previsto y vacío.** Un hito acreditado debería llevar el
   documento que lo prueba, pero del expediente todavía no cuelga ningún fichero: la
   columna existe para que cuando los haya no haya que migrar nada.
+- **Prorrogar es una tercera cosa, y estaba faltando.** Pausa, recálculo y prórroga
+  mueven las tres la fecha y son distintas: la pausa detiene el reloj, el recálculo
+  corrige lo que estaba mal, y la prórroga es el **órgano ampliando** un plazo correcto.
+  Su fecha no se deduce de ninguna regla: viene en una resolución, y se guarda con su
+  referencia. Solo se prorroga un plazo —un señalamiento no se prorroga: se cambia de
+  fecha, y eso lo decide el juzgado—. El hueco lo destapó el ecosistema antiguo, que sí
+  tenía `prorrogar` como acción propia.
+- **Todo lo que le pasa a un hito queda en `acciones`.** Faltaba: los hitos cambiaban de
+  estado sin dejar rastro mientras `sec.agenda` sí registraba lo suyo. No es auditoría
+  por gusto —el contrato de todo lo que toca plazos exige que una fecha se pueda
+  explicar, y una fecha sin su historia solo se puede creer—. Con el registro se
+  reconstruye por qué el vencimiento es el que es: qué lo pauseó, qué lo prorrogó, quién
+  lo dio por hecho y cuándo se supo cada cosa.
 - **Pausar exige motivo y reanudar mueve la fecha.** Una pausa sin causa anotada no se
   puede explicar después, y una que no mueve el vencimiento es una marca decorativa
   —que es justo lo que hacía el ecosistema antiguo—. La fecha nueva llega ya

@@ -500,6 +500,11 @@ de ahí todo es tabla y reglas fijas: con los mismos datos, el mismo resultado.
     cambia cuándo empiezan los avisos y cuánto insisten, **nunca las fechas**. La
     franja alimenta a `sec.notificador`. En el ecosistema antiguo la prioridad la ponía
     un modelo.
+  - **Y prórroga no es ninguna de las dos.** Una pausa detiene el reloj por un hecho
+    tasado; un recálculo corrige una fecha que estaba mal o le faltaba un dato; una
+    **prórroga** es el órgano ampliando un plazo que estaba bien. La fecha nueva no sale
+    de ninguna regla nuestra: viene en una resolución, y se guarda con su referencia.
+    Confundirlas deja un vencimiento que nadie sabe explicar.
   - **Pausa no es reinicio.** La caducidad sustantiva no se interrumpe, pero se
     suspende en supuestos tasados: la papeleta de conciliación para el plazo del
     despido, que se reanuda al día siguiente del acto o a los quince días hábiles si no
