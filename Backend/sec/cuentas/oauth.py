@@ -1,5 +1,9 @@
 """OAuth 2.0 para las cuentas de correo y calendario (ARQUITECTURA.md 8.6).
 
+Vive en `sec.cuentas` y no dentro de `sec.mail` porque el consentimiento es uno
+por cuenta y trae los dos scopes: el mismo refresh token sirve al buzón y al
+calendario, así que `sec.mail` y `sec.agenda` entran por aquí los dos.
+
 Sustituye a la contraseña de aplicación con la que `sec.mail` hablaba por IMAP
 con Gmail. Cubre los dos primeros mundos de 8.6 -- Google y Microsoft --, que
 son los que van por API autenticada con OAuth; el tercero (iCloud, Fastmail,
@@ -33,7 +37,7 @@ import urllib.parse
 import urllib.request
 import webbrowser
 
-from . import config
+from . import ajustes as config
 
 # Margen con el que se considera caducado un access token antes de que lo esté
 # de verdad: evita que una petición salga con un token que caduca en vuelo.

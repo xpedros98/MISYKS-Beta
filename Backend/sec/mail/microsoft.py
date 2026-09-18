@@ -22,7 +22,8 @@ Tres diferencias con Gmail que no son de estilo:
 - **El delta no es un número sino una URL.** El cursor que se guarda es el
   `@odata.deltaLink` entero, y se pide tal cual la vez siguiente.
 """
-from . import correo, oauth
+from ..cuentas import oauth
+from . import correo
 
 API = "https://graph.microsoft.com/v1.0/me"
 

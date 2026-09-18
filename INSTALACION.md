@@ -11,7 +11,7 @@ a día está en `MANUAL.md`.
 |---|---|---|
 | **Homebrew** | instalar lo demás | ver abajo |
 | **Git** | traer y subir el código | `brew install git` |
-| **Python 3** | el Backend (los agentes) | `brew install python` |
+| **Python 3** | el Backend (agentes y módulos) | `brew install python` |
 | **Rust** | el Frontend (la app de escritorio) | `rustup`, ver abajo |
 | **Node** | de él viene `npm` | `brew install node` |
 | **Claude Code** | el asistente con el que trabajamos | `npm install -g @anthropic-ai/claude-code` |
@@ -127,6 +127,19 @@ operación se puede hacer desde la pantalla de Ajustes de la app.
 volver a conectar: no es un fallo, es cómo trata Google a las apps sin publicar.
 Y `python -m sec.mail estado` dirá entonces `revocado`, que es el estado previsto
 para eso.
+
+**La agenda no se conecta aparte.** Ese mismo consentimiento trae el calendario, así
+que `sec.agenda` ya puede trabajar en cuanto `estado` diga `conectado`:
+
+```bash
+.venv/bin/python -m sec.agenda sincronizar
+.venv/bin/python -m sec.agenda agenda
+```
+
+Si responde `403 ... Google Calendar API has not been used in project ...`, es el
+paso 2 a medias: está habilitada la Gmail API y no la de Calendar. Se habilita en
+**APIs y servicios → Biblioteca** del mismo proyecto y tarda un par de minutos en
+propagarse. El consentimiento ya concedido sigue valiendo: no hay que reconectar.
 
 Microsoft todavía no tiene registro hecho: el adaptador de Graph está escrito pero
 sin probar contra una cuenta real.

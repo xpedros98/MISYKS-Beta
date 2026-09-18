@@ -13,7 +13,8 @@ hexadecimal y el otro en decimal. De ahí que la migración de la base
 """
 import base64
 
-from . import correo, oauth
+from ..cuentas import oauth
+from . import correo
 
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
 

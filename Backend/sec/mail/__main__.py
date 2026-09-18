@@ -17,12 +17,13 @@ pantalla de Ajustes de la app (Frontend), no se editan a mano.
 import argparse
 import sys
 
-from . import config, oauth
+from ..cuentas import consola, oauth
+from . import config
 from .agent import SecMail
 
 
 def main():
-    p = argparse.ArgumentParser(prog="python -m sec.mail", description="Sub-agente de correo de MISYKS.")
+    p = argparse.ArgumentParser(prog="python -m sec.mail", description="Módulo de correo de MISYKS.")
     sub = p.add_subparsers(dest="orden", required=True)
     s = sub.add_parser("conectar", help="autoriza una cuenta de correo en el navegador")
     s.add_argument("proveedor", nargs="?", default=config.PROVEEDOR_POR_DEFECTO, choices=sorted(oauth.PROVEEDORES))
@@ -41,6 +42,8 @@ def main():
     s.add_argument("id", type=int)
     s.add_argument("carpeta")
     args = p.parse_args()
+    # Un asunto con un emoji no puede tumbar `listar` entero (ver consola.py).
+    consola.tolerante()
 
     try:
         ejecutar(args)
