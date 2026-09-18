@@ -1,1 +1,1 @@
-"""PROCESAL: los sub-agentes del tiempo y la forma (ARQUITECTURA.md §1)."""
+"""PROCESAL: los módulos del tiempo y la forma (ARQUITECTURA.md §1)."""

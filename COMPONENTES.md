@@ -1,30 +1,38 @@
-# Agentes
+# Componentes: agentes IA y módulos
 
-> Para qué sirve cada sub-agente y qué no puede hacer. Nueve grupos, 56
-> sub-agentes. Solo dos tienen código; el resto es diseño.
+> Para qué sirve cada componente y qué no puede hacer. Nueve grupos, 56
+> componentes. Solo dos tienen código; el resto es diseño.
 > La arquitectura del sistema —cómo se componen los grupos, las rutas, los
 > arquetipos— está en `ARQUITECTURA.md`. Última actualización: 2026-09-17
 
-**Estado.** Implementado: `sec.mail`. A medias: `pro.calendario`, del que existe el
-calendario de festivos y su recolector pero **no el motor de días**, que es el
-sub-agente propiamente dicho. Los otros 54 son diseño, sin código.
+**Dos clases de componente, y no se confunden.** Un **agente IA** invoca un modelo
+de lenguaje: su salida hay que acotarla y comprobarla porque puede inventar. Un
+**módulo** es código determinista, sin LLM: la misma entrada da siempre la misma
+salida y se audita leyéndolo. «Componente» es el término que los engloba cuando da
+igual cuál de los dos sea; «agente», a secas, significa siempre agente IA. La
+frontera no es de estilo: de ella dependen dónde corre cada uno (abajo) y qué
+garantías hay que exigirle.
+
+**Estado.** Implementados: `sec.mail` y `sec.agenda`, los dos módulos. A medias:
+`pro.calendario`, del que existe el calendario de festivos y su recolector pero **no
+el motor de días**, que es el módulo propiamente dicho. Los otros 53 son diseño, sin
+código.
 
 Cada entrada sigue la misma plantilla: qué hace, su contrato, las reglas de dominio
-que debe respetar, cómo falla y de qué depende. Un sub-agente está bien acotado
+que debe respetar, cómo falla y de qué depende. Un componente está bien acotado
 cuando puede fallar solo y verificarse solo.
 
 `secretario` y `procesal` están detallados, y de `investigador` lo está
-`inv.normativa`. Del resto hay todavía solo la tarea de cada sub-agente, no su
+`inv.normativa`. Del resto hay todavía solo la tarea de cada componente, no su
 contrato ni sus reglas: no es que no tengan restricciones, es que aún no están
 escritas.
 
-**Dónde corre cada uno.** Los agentes de IA —los que invocan un modelo de
-lenguaje— corren todos en el servidor `maat`, porque ahí está el modelo. Los
-agentes de software, deterministas y sin LLM, corren donde están sus datos y sus
-credenciales: `sec.mail` en el PC del letrado, y `pro.calendario` también, porque
-el motor de días consulta expedientes. Su recolector es la excepción que confirma
+**Dónde corre cada uno.** Los agentes IA corren todos en el servidor `maat`,
+porque ahí está el modelo. Los módulos corren donde están sus datos y sus
+credenciales: `sec.mail` y `sec.agenda` en el PC del letrado --comparten cuenta y
+tokens--, y `pro.calendario` también, porque el motor de días consulta expedientes. Su recolector es la excepción que confirma
 la regla: solo lee boletines públicos, así que puede correr en el servidor. Ver
-`ARQUITECTURA.md` §1, «Dónde corre cada agente».
+`ARQUITECTURA.md` §1, «Dónde corre cada componente».
 
 ---
 
@@ -33,17 +41,17 @@ la regla: solo lee boletines públicos, así que puede correr en el servidor. Ve
 La capa del despacho. Sabe recibir, clasificar, recordar y enviar; no sabe de plazos
 ni de derecho, y no toca ningún canal procesal.
 
-**`sec.mail`** — receptor · agente de software, en local · **implementado** (lo que aún falta, en §8.3)
+**`sec.mail`** — receptor · módulo, en local · **implementado** (lo que aún falta, en §8.3)
 Gmail API o Microsoft Graph, **autenticadas por OAuth**, y base local cifrada con
 SQLCipher. Corre en el ordenador del letrado, no en el servidor: tiene el acceso al
 correo y lee el contenido sin anonimizar, así que ese contenido no sale de su
-máquina. IMAP sobrevive solo como transporte del «tercer mundo» —iCloud, Fastmail,
-servidores propios—, con contraseña de aplicación y todavía sin adaptador
-(`ARQUITECTURA.md` §8.6).
+máquina. El «tercer mundo» —iCloud, Fastmail, servidores propios— seguirá siendo
+IMAP con contraseña de aplicación, porque ahí no hay otra vía, pero **no está
+escrito**: no hay adaptador (`ARQUITECTURA.md` §8.6).
 
 - **Contrato:** `{cuenta, ventana}` → `{mensajes[], adjuntos[], resumen}`
 - **Reglas:**
-  - El agente **lee, no vacía**: el correo permanece en el servidor y el letrado lo
+  - El módulo **lee, no vacía**: el correo permanece en el servidor y el letrado lo
     sigue viendo desde sus propios dispositivos. Tampoco marca como leído.
   - **La identidad del mensaje es `(proveedor, mensaje_id)`**, no el identificador a
     secas: dos proveedores pueden dar el mismo y no son el mismo correo. En Graph,
@@ -98,12 +106,34 @@ torcida y con reflejo.
     indexa.
 - **Falla si:** clasifica con confianza desde un resumen que omitió el dato clave.
 
-**`sec.agenda`** — reuniones, juicios y plazos
+**`sec.agenda`** — reuniones, juicios y plazos · módulo, en local · **implementado**
+(lo que aún falta, en §8.3)
+Google Calendar API con el **mismo consentimiento OAuth que el correo** y base local
+cifrada con SQLCipher. Corre junto a `sec.mail` porque usa sus tokens; §8.6 deja
+abierto si debería vivir en `maat`, para poder avisar con el equipo del letrado
+apagado.
 
 - **Contrato:** `{eventos[], plazos_de_procesal[]}` → `{agenda, conflictos[]}`
 - **Reglas:**
   - **No calcula plazos: los recibe.** `procesal` computa, `sec.agenda` anota.
-    Duplicar el cálculo aquí garantiza que las dos versiones diverjan.
+    Duplicar el cálculo aquí garantiza que las dos versiones diverjan. En el código
+    no hay ni una suma de días, y es a propósito.
+  - **Un plazo que se mueve no es un dato nuevo, es un aviso.** Al recibirlo otra vez
+    se compara con la fecha anterior y se dice si se **adelanta** o se **retrasa**:
+    lo primero exige aviso inmediato porque puede costar el plazo, lo segundo se
+    actualiza sin interrumpir a nadie. Es lo que consume `sec.notificador`.
+  - **Del calendario no viene qué es cada cosa.** La API no distingue un juicio de un
+    café, así que todo entra como `sin_clasificar` y lo fija después una persona (o
+    algún día `sec.clasificador`). Un evento sin clasificar **sí ocupa hora** a
+    efectos de colisiones: la misma prudencia que aplica `pro.calendario` a los
+    festivos que le faltan, porque una colisión de más se descarta en dos segundos y
+    una de menos se descubre el día del señalamiento.
+  - **Escribir en el calendario del letrado es a petición, nunca automático.** Una
+    agenda que empieza a crear eventos sola deja de ser de fiar.
+  - **La ventana la impone la agenda, no el proveedor.** Google, al preguntarle por lo
+    que ha cambiado, contesta con la serie anual entera expandida hasta 2099 aunque se
+    le haya pedido un año. Lo que cae fuera se descarta —salvo que ya estuviera
+    guardado, que es como se sabe que algo se ha movido fuera—.
   - Tres clases de entrada con naturaleza distinta: reuniones (internas, movibles),
     juicios y vistas (externas, fijas) y plazos (derivados, con fecha dura).
   - Detecta **colisiones**: dos señalamientos del mismo letrado a la misma hora es la
@@ -112,12 +142,18 @@ torcida y con reflejo.
     prórrogas, actualizaciones de renta—, que es lo que da vida posterior al
     arquetipo G.
 - **Falla si:** calcula plazos por su cuenta; solo mira el día siguiente; no cruza
-  agendas entre letrados del despacho.
+  agendas entre letrados del despacho; concluye que un evento ya no existe a partir
+  de una sincronización incremental, donde lo que no viene es lo que **no ha
+  cambiado** —confundirlo vacía la agenda sin dar ningún error—; o compara horas
+  locales en vez de instantes, que inventa colisiones entre zonas y silencia las
+  reales.
+- **Necesita:** la cuenta conectada por OAuth (la misma que `sec.mail`) y, de
+  `procesal`, los plazos ya calculados.
 
 **`sec.notificador`** — avisos y log
 El letrado no verifica las fechas de plazo (ver `pro.calendario`, en PROCESAL), así
 que el riesgo se desplaza: ya no es tanto calcular mal como que un aviso pase
-desapercibido. Este sub-agente es la mitad de la garantía; la otra mitad es la
+desapercibido. Este componente es la mitad de la garantía; la otra mitad es la
 validación del motor de días.
 
 - **Contrato:** `{evento, prioridad}` → `{notificacion, log_entry, visto}`
@@ -178,9 +214,11 @@ abajo), marcado a la espera de confirmación.
 
 ## ARCHIVADOR · estructura — 5
 
-Convierte un documento en una posición dentro del despacho.
+Convierte un documento en una posición dentro del despacho. Grupo mixto: extraer e
+identificar es trabajo de agente IA; nombrar según convención y deduplicar por hash
+no necesita modelo. Cuál es cuál se fija al escribir sus contratos.
 
-| sub-agente | uso |
+| componente | uso |
 |---|---|
 | `arc.metadatos` | nº de procedimiento, órgano, autos, fecha |
 | `arc.partes` | demandante, demandado, procurador, letrado contrario |
@@ -191,9 +229,9 @@ Convierte un documento en una posición dentro del despacho.
 ## PROCESAL · tiempo y forma — 12
 
 Justo después de la entrada y justo antes de la salida. **No toca canales**: no tiene
-credenciales ni sabe enviar. Determinista de punta a punta — ningún sub-agente de
-`procesal` debería invocar un LLM. Si alguno lo necesita, está mal acotado: lo que
-falta es una tabla mejor.
+credenciales ni sabe enviar. Determinista de punta a punta: **los doce son módulos,
+ninguno es agente IA**. Si alguno necesitara un LLM, está mal acotado: lo que falta
+es una tabla mejor.
 
 ### Puerta
 
@@ -254,9 +292,9 @@ la **corrección**, antes de usarlo con clientes (validación, abajo), y la
   aplicaron y con qué versión del calendario. El letrado no tiene por qué leerla, pero
   si alguien pregunta «¿por qué esta fecha?» hay respuesta, y el cálculo se puede
   repetir aunque el calendario se haya corregido después.
-- **Es un agente de software**, sin LLM: corre donde estén los datos de los
-  expedientes, según la regla de `ARQUITECTURA.md` §1, «Dónde corre cada agente». El
-  calendario, en cambio, es dato público y puede vivir en el servidor sin reservas.
+- **Es un módulo**, sin LLM: corre donde estén los datos de los expedientes, según la
+  regla de `ARQUITECTURA.md` §1, «Dónde corre cada componente». El calendario, en
+  cambio, es dato público y puede vivir en el servidor sin reservas.
 - **Validación antes de usarlo con clientes.** Como nadie revisa después, no entra en
   uso hasta superar las tres comprobaciones. No hacen falta casos reales de un
   abogado, que hoy no existen:
@@ -277,7 +315,7 @@ la **corrección**, antes de usarlo con clientes (validación, abajo), y la
   fecha que no sabe explicar; se usa con clientes sin haber superado la validación.
 - **Necesita:**
   - Calendario oficial de festivos por municipio, **fiable y al día**. Mantenerlo no
-    es tarea de este sub-agente: lo llena el **recolector** (ver nota siguiente).
+    es tarea de este módulo: lo llena el **recolector** (ver nota siguiente).
   - `municipio_organo`, de `pro.destino`; en cómputo administrativo, además, el
     municipio de residencia del interesado, de la ficha del cliente.
 
@@ -302,7 +340,7 @@ oficiales, lee las publicaciones y escribe los festivos que el motor consume.
     regresión se queda ahí indefinidamente.
   - **No es de una sola pasada**, aunque lo parezca: las correcciones a mitad de año
     obligan a repetirla, y por eso guarda la huella de cada documento leído.
-  - Es un **agente de software**, sin LLM. Solo lee dato público, así que puede correr
+  - Es un **módulo**, sin LLM. Solo lee dato público, así que puede correr
     en el servidor y replicarse.
 - **Falla si:** deja un hueco sin marcar; borra un festivo en vez de retirarlo;
   aborta la pasada entera porque una fuente falló; confunde los dos cómputos.
@@ -409,7 +447,8 @@ El que puede matar un caso.
 - **Necesita:** `pro.calendario` + tabla `tipoActo → {plazo, dies_a_quo, norma}`.
 
 **`pro.prescripcion`** — plazos sustantivos
-Se comporta al revés que la caducidad, y por eso es un sub-agente distinto.
+Se comporta al revés que la caducidad, y por eso es un módulo aparte y no una
+opción de `pro.caducidad`.
 
 - **Contrato:** `{accion, partidas[], hechos_interruptivos[]}` → `{partidas_vivas[], partidas_prescritas[]}`
 - **Reglas:**
@@ -425,7 +464,7 @@ Se comporta al revés que la caducidad, y por eso es un sub-agente distinto.
 - **Necesita:** historial de requerimientos, que produce `pro.burofax`.
 
 **`pro.procedibilidad`** — requisitos previos
-El único sub-agente que puede **desviar el pipeline a otro tipo documental**.
+El único módulo que puede **desviar el pipeline a otro tipo documental**.
 
 - **Contrato:** `{tipo_documento, expediente}` → `{cumplidos[], pendientes[], ruta_alternativa?}`
 - **Reglas:**
@@ -470,12 +509,12 @@ Segundo paso del grupo, justo antes de que el secretario envíe. Existe porque
     notaria · entrega`.
   - **Resuelve también el municipio de la sede del órgano**, a partir de una tabla de
     órganos y sedes. `pro.calendario` lo necesita para aplicar los festivos locales, y
-    este es el sub-agente que ya conoce el órgano; sin esta resolución el calendario
+    este es el módulo que ya conoce el órgano; sin esta resolución el calendario
     tendría que adivinarlo o caería en el municipio del despacho. Esta consulta se usa
     **ya en la puerta**, no solo en la salida: el primer cálculo del plazo la necesita.
   - Es el punto de traspaso limpio entre los dos grupos: **procesal decide dónde,
     secretario entrega**.
-  - 30 de los 89 tipos no salen por LexNET. Sin este sub-agente, el destino se
+  - 30 de los 89 tipos no salen por LexNET. Sin este módulo, el destino se
     asumiría y un tercio del catálogo saldría por el canal equivocado.
 
 ### Salida — canales procesales
@@ -514,7 +553,7 @@ El más complejo del bloque: no es un sistema, son decenas.
     queda registrada.
   - **Genera trabajo futuro:** la entrega arranca un reloj que puede vencer en
     silencio. Esa fecha va a `sec.agenda` y, al vencer, dispara `recurso_alzada` o
-    `recurso_contencioso`. Es el único sub-agente de salida cuya entrega **produce una
+    `recurso_contencioso`. Es el único módulo de salida cuya entrega **produce una
     entrada futura**.
   - Dada la fragmentación, conviene resolverlo con **drivers enchufables** por
     Administración (AEAT, Seguridad Social, extranjería, cada CCAA) más un driver
@@ -548,8 +587,8 @@ El más complejo del bloque: no es un sistema, son decenas.
 
 ### Notas de diseño del grupo
 
-- **Ninguno usa LLM.** Es el bloque auditable del sistema; si deja de serlo, se pierde
-  la única parte verificable a mano.
+- **Ninguno usa LLM: son módulos, no agentes.** Es el bloque auditable del sistema;
+  si deja de serlo, se pierde la única parte verificable a mano.
 - **La tabla de plazos es el activo crítico.** `pro.caducidad` y `pro.prescripcion`
   valen exactamente lo que valga esa tabla. Debe versionarse, tener autoría y fecha de
   revisión, y ser un dato, no código.
@@ -560,7 +599,7 @@ El más complejo del bloque: no es un sistema, son decenas.
 
 Toda cita que produce debe ser **comprobable**.
 
-| sub-agente | uso |
+| agente IA | uso |
 |---|---|
 | `inv.normativa` | BOE: artículo exacto y vigencia a la fecha del hecho |
 | `inv.jurisprudencia` | CENDOJ, filtrado por órgano e instancia |
@@ -568,11 +607,11 @@ Toda cita que produce debe ser **comprobable**.
 | `inv.doctrina` | criterio administrativo y doctrinal |
 | `inv.citas` | ¿existe la referencia y dice lo que se le atribuye? |
 
-**`inv.normativa`** — artículo y vigencia · agente de IA, en `maat` · **diseñado, sin código**
+**`inv.normativa`** — artículo y vigencia · agente IA, en `maat` · **diseñado, sin código**
 
-Único sub-agente diseñado con **bucle de herramienta** en vez de una sola llamada:
+Único agente IA diseñado con **bucle de herramienta** en vez de una sola llamada:
 localizar un artículo exige a veces reintentar con otro identificador, y eso es
-iterativo por naturaleza. Los demás sub-agentes siguen siendo de una llamada; ver
+iterativo por naturaleza. Los demás agentes IA siguen siendo de una llamada; ver
 las notas del grupo.
 
 - **Contrato:** `{consulta, fecha_del_hecho}` → `{norma, articulo, vigente_en, texto, url}`
@@ -594,7 +633,7 @@ las notas del grupo.
     Medido en `maat` con `qwen2.5:7b`: al pedirle que reprodujera el art. 1124 CC
     convirtió «no **cumpliere**» en «no **cumpla**» dentro de una cita entrecomillada.
     Es correcto en castellano, nadie lo nota al leer, y destruye la comprobabilidad
-    que `AGENTES.md` exige a todo el grupo. No se corrige con el prompt: un 7B que
+    que `COMPONENTES.md` exige a todo el grupo. No se corrige con el prompt: un 7B que
     regenera texto siempre puede deslizar una palabra. Se corrige no dejándole
     regenerarlo.
   - **La parada la decide el código, no el modelo.** Éxito = `consultar_boe` devolvió
@@ -630,7 +669,7 @@ las notas del grupo.
 ### Notas de diseño del grupo
 
 - **`inv.normativa` es la excepción, no el patrón.** Lleva bucle porque localizar un
-  artículo puede exigir reintentar; los otros cuatro sub-agentes del grupo son de una
+  artículo puede exigir reintentar; los otros cuatro agentes IA del grupo son de una
   llamada y no deben ganar herramientas «por coherencia». Un bucle añade modos de
   fallo, y solo se paga donde la tarea es genuinamente iterativa.
 - **La superficie de herramientas es cerrada y de lectura.** Al modelo se le ofrece
@@ -642,7 +681,7 @@ las notas del grupo.
 
 Único grupo que **interrumpe al humano por iniciativa propia**.
 
-| sub-agente | uso |
+| agente IA | uso |
 |---|---|
 | `pru.inventario` | qué material hay y en qué soporte |
 | `pru.admisibilidad` | licitud y forma de obtención |
@@ -652,10 +691,11 @@ las notas del grupo.
 
 ## CALCULADORA · números — 6
 
-Determinista. Toda cifra que se defiende ante un juez sale de una función auditable:
+Determinista: **seis módulos, ningún agente IA**. Toda cifra que se defiende ante un
+juez sale de una función auditable:
 **el redactor escribe alrededor del número, nunca lo produce**.
 
-| sub-agente | uso |
+| módulo | uso |
 |---|---|
 | `cal.antiguedad` | cómputo de la relación, con interrupciones |
 | `cal.indemnizacion` | por tipo de extinción, con tramos y topes |
@@ -668,7 +708,7 @@ Determinista. Toda cifra que se defiende ante un juez sale de una función audit
 
 El análisis del adversario es el medio; **la recomendación es el fin**.
 
-| sub-agente | uso |
+| agente IA | uso |
 |---|---|
 | `est.contrario` | descompone el escrito ajeno en argumentos rebatibles |
 | `est.citas-contrario` | ¿las citas del adversario existen y sostienen lo que dice? |
@@ -683,7 +723,7 @@ administrativo): son tres prompts distintos, no uno parametrizado.
 
 Regla dura: **nunca deja un placeholder vacío**. Si falta un dato, se pide.
 
-| sub-agente | uso |
+| agente IA | uso |
 |---|---|
 | `red.estructura` | esqueleto según tipo documental |
 | `red.hechos` | relato numerado (PRIMERO.-, SEGUNDO.-) |
@@ -696,7 +736,7 @@ Regla dura: **nunca deja un placeholder vacío**. Si falta un dato, se pide.
 
 Devuelve `veto` o `visto_bueno`, con los defectos encontrados.
 
-| sub-agente | uso |
+| agente IA | uso |
 |---|---|
 | `cri.formal` | requisitos tasados por tipo, como lista cerrada |
 | `cri.citas` | ¿las citas del propio escrito existen? |

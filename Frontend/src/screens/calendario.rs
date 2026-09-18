@@ -3,7 +3,7 @@
 // Es la vista de **mantenimiento**, no la del dia a dia. El letrado no va a
 // abrir esto: lo que el mirara son los plazos, y para eso hace falta el motor de
 // dias, que todavia no existe. Lo que esta pantalla evita es el fallo que
-// describe AGENTES.md -- que el calendario envejezca en silencio -- poniendo
+// describe COMPONENTES.md -- que el calendario envejezca en silencio -- poniendo
 // delante de alguien del equipo lo que falta y lo que se ha roto.
 //
 // La tabla va en un solo color: con varios compitiendo, el ojo no sabe donde

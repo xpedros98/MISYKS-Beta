@@ -203,4 +203,4 @@ Eso no es un agujero silencioso. La tabla de cobertura marca esos años como
 `pendiente`, el motor da fecha prudente y `sec.notificador` avisa. El sistema
 sabe lo que no sabe, que es la propiedad que había que conservar.
 
-El agente que vigile esos cambios solo está pendiente de escribir.
+El actualizador que vigile esos cambios solo está pendiente de escribir.

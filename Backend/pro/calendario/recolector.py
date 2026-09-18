@@ -1,8 +1,8 @@
 """El recolector: lo que va a los boletines y llena el calendario.
 
 `pro.calendario` calcula plazos y no sabe de dónde salen los festivos; esto es
-lo que los trae. AGENTES.md deja el hueco escrito al decir que el calendario
-oficial «se da por resuelto: mantenerlo no es tarea de este sub-agente». Va
+lo que los trae. COMPONENTES.md deja el hueco escrito al decir que el calendario
+oficial «se da por resuelto: mantenerlo no es tarea de este módulo». Va
 aparte del motor por tres razones que no son de estilo:
 
 - **Corren en sitios distintos.** El motor toca expedientes y vive en el PC del

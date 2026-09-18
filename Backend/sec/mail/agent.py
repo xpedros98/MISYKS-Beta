@@ -1,4 +1,4 @@
-"""SecMail: la interfaz del sub-agente de correo para el resto de MISYKS."""
+"""SecMail: la interfaz del módulo de correo para el resto de MISYKS."""
 import json
 
 from . import correo as correo_api
