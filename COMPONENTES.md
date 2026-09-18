@@ -141,6 +141,12 @@ apagado.
   - Guarda obligaciones vivas de documentos ya cerrados —vencimientos de contrato,
     prórrogas, actualizaciones de renta—, que es lo que da vida posterior al
     arquetipo G.
+  - **Un plazo tiene vida, y la recibe.** `abierto · en_pausa · cumplido · cancelado`
+    se guardan; **`vencido` se deriva al leer** y no se escribe nunca, porque
+    guardarlo sería `sec.agenda` decidiendo que un plazo ha muerto, y este componente
+    no decide. Solo vence lo que está abierto y tiene la fecha `firme`: con datos
+    dudosos no hay vencido, hay provisional. Y una reanotación de `procesal` con otra
+    fecha **no reabre** lo ya presentado.
   - **Recoge el «Hecho» del abogado.** Si presentó por su cuenta, fuera de MISYKS, un
     clic cierra el plazo como `cumplido`. Guarda la fecha de hoy, que puede cambiar
     —importa si la presentación abre plazos futuros, como el silencio

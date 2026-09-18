@@ -12,7 +12,7 @@ son firmes -- son columnas, no tablas.
 """
 import os
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from sqlcipher3 import dbapi2 as sqlcipher
@@ -46,6 +46,13 @@ CREATE TABLE IF NOT EXISTS eventos (
     expediente   TEXT,                     -- plazos y obligaciones
     estado       TEXT,                     -- firme | provisional, lo dice procesal
     franja       TEXT,                     -- holgado | ajustado | critico | vencido
+    -- La vida del plazo, distinta de `estado`: `estado` dice si la fecha es
+    -- fiable, `vida` en qué punto de su recorrido está. Solo la llevan los
+    -- plazos; en una reunión o una vista se queda vacía.
+    vida         TEXT,                     -- abierto | en_pausa | cumplido | cancelado
+    cerrado_por  TEXT,                     -- acuse | abogado
+    cerrado_en   TEXT,                     -- fecha de presentación, no de registro
+    motivo       TEXT,                     -- por qué se pausó o se canceló
     actualizado_en TEXT,
     guardado_en  TEXT NOT NULL
 );
@@ -74,6 +81,22 @@ CREATE TABLE IF NOT EXISTS acciones (
 );
 """
 
+# La vida de un plazo, tal como la define `pro.caducidad` en COMPONENTES.md.
+#
+# **`vencido` no está aquí, y es a propósito.** Se deriva al leer (ver
+# `vida_efectiva`) en vez de guardarse, porque escribirlo significaría que
+# `sec.agenda` decide por su cuenta que un plazo ha muerto, y la regla de este
+# módulo es que no decide: recibe. Dar un asunto por perdido es de
+# `pro.caducidad`, que además sabe algo que aquí no se sabe -- si los datos son
+# dudosos no hay vencido, hay provisional.
+VIDAS = ("abierto", "en_pausa", "cumplido", "cancelado")
+
+# Quién cerró el plazo, y no es un detalle de auditoría: `pro.acuse` distingue
+# cumplido **acreditado** (hay justificante) de cumplido **declarado** (lo dice
+# el abogado, que presentó por su cuenta fuera de MISYKS). La auditoría tiene
+# que poder separar lo que consta de lo que se ha dicho.
+CIERRES = ("acuse", "abogado")
+
 # `sin_clasificar` es el tipo con el que entra todo lo que viene del calendario
 # del abogado: la API no dice si un evento es un juicio o un café, y suponerlo
 # es exactamente lo que no debe hacer un módulo. Lo fija después `clasificar`.
@@ -87,6 +110,30 @@ TIPOS = ("sin_clasificar", "reunion", "vista", "plazo", "obligacion")
 # resulta ser un café se descarta en dos segundos; una vista sin clasificar que
 # no avisa de que pisa otra se descubre el día del señalamiento.
 TIPOS_CON_HORA = ("sin_clasificar", "reunion", "vista")
+
+# Campos que una reescritura de la fila **no** puede tocar. Los ponen personas o
+# transiciones explícitas, y una sincronización del calendario o un plazo que
+# `procesal` vuelve a anotar no sabe nada de ellos.
+PROTEGIDOS = ("tipo", "abogado", "vida", "cerrado_por", "cerrado_en", "motivo")
+
+
+def vida_efectiva(fila, hoy=None):
+    """En qué punto está el plazo, contando el paso del tiempo.
+
+    `vencido` se calcula aquí y no se guarda: escribirlo sería `sec.agenda`
+    decidiendo que un plazo ha muerto, y este módulo no decide. Dos condiciones,
+    y la segunda es de Jordi: solo vence lo que está **abierto** y lo que tiene
+    la fecha `firme`. Con datos dudosos no hay vencido, hay provisional -- dar
+    un asunto por perdido es demasiado grave para hacerlo sobre una fecha que
+    aún puede moverse.
+    """
+    vida = fila["vida"]
+    if vida != "abierto" or fila["tipo"] != "plazo":
+        return vida
+    if fila["estado"] == "provisional":
+        return "abierto"
+    fecha = (fila["inicio_local"] or "")[:10]
+    return "vencido" if fecha and fecha < (hoy or _hoy()) else "abierto"
 
 
 def abrir(ruta=None):
@@ -139,7 +186,9 @@ class BaseDatos:
         if "letrado" in columnas and "abogado" not in columnas:
             self.conn.execute("ALTER TABLE eventos RENAME COLUMN letrado TO abogado")
             columnas.add("abogado")
-        for nombre, tipo in (("repeticion", "TEXT"),):
+        for nombre, tipo in (("repeticion", "TEXT"), ("vida", "TEXT"),
+                             ("cerrado_por", "TEXT"), ("cerrado_en", "TEXT"),
+                             ("motivo", "TEXT")):
             if nombre not in columnas:
                 self.conn.execute(f"ALTER TABLE eventos ADD COLUMN {nombre} {tipo}")
         self.conn.commit()
@@ -188,6 +237,11 @@ class BaseDatos:
         El `tipo` y el `abogado` de una fila ya existente **no se pisan**: los
         pone quien clasifica (hoy, una persona), y una sincronización posterior
         no tiene por qué saber que aquel evento del calendario era una vista.
+
+        Tampoco se pisa la **vida del plazo** ni quién lo cerró. Cambian solo
+        por las transiciones explícitas de más abajo, nunca porque alguien
+        vuelva a anotar el plazo con otra fecha: `procesal` recalculando un
+        vencimiento no puede reabrir en silencio algo que ya se presentó.
         """
         campos = {
             clave: evento.get(clave)
@@ -196,7 +250,8 @@ class BaseDatos:
                 "origen", "abogado",
                 "titulo", "lugar", "descripcion", "inicio_local", "fin_local", "zona",
                 "inicio_utc", "fin_utc", "todo_el_dia", "cancelado", "organizador",
-                "asistentes", "expediente", "estado", "franja",
+                "asistentes", "expediente", "estado", "franja", "vida",
+                "cerrado_por", "cerrado_en", "motivo",
             )
         }
         campos["todo_el_dia"] = int(bool(campos.get("todo_el_dia")))
@@ -220,8 +275,7 @@ class BaseDatos:
         cambios = {
             clave: valor
             for clave, valor in campos.items()
-            # `tipo` y `abogado` se respetan si ya estaban clasificados a mano.
-            if clave not in ("tipo", "abogado") and valor != anterior[clave]
+            if clave not in PROTEGIDOS and valor != anterior[clave]
         }
         if not cambios:
             return "igual", anterior["id"]
@@ -329,6 +383,9 @@ class BaseDatos:
                 "expediente": expediente,
                 "estado": estado,
                 "franja": franja,
+                # Nace `abierto`; si ya existía, `vida` está protegida y esto
+                # no lo toca.
+                "vida": "abierto",
             }
         )
         fila = self.evento_por_identidad("", f"plazo:{plazo_id}")
@@ -343,6 +400,107 @@ class BaseDatos:
         # revienta el `print` entero con UnicodeEncodeError.
         self.registrar(fila["id"], f"plazo_{movimiento}", f"{fecha_anterior} -> {fecha_limite}")
         return movimiento, fecha_anterior
+
+    # --- la vida del plazo ------------------------------------------------
+    #
+    # Las cuatro transiciones se **reciben**, no se deducen. `sec.agenda` anota
+    # que algo ha pasado; quién decide que ha pasado es `pro.acuse`, el abogado
+    # o `pro.caducidad`.
+
+    def cerrar_plazo(self, plazo_id, por, fecha_presentacion=None, referencia=None):
+        """Da un plazo por cumplido. `por` es 'acuse' o 'abogado'.
+
+        **Siempre guarda la fecha de presentación**, incluso cuando la pone por
+        defecto: cerrar un plazo sin ella es uno de los modos de fallo escritos
+        de este módulo. Importa porque una presentación abre a menudo plazos
+        futuros -- el del silencio administrativo se cuenta desde ella, no desde
+        el día en que alguien pulsó el botón.
+        """
+        if por not in CIERRES:
+            raise ValueError(f"Cierre desconocido: {por}. Los que hay: {', '.join(CIERRES)}.")
+        fila = self._plazo(plazo_id)
+        fecha = fecha_presentacion or _hoy()
+        self._cambiar_vida(fila["id"], "cumplido", cerrado_por=por, cerrado_en=fecha)
+        detalle = f"presentado el {fecha}"
+        if referencia:
+            detalle += f" ({referencia})"
+        self.registrar(fila["id"], f"cumplido_{por}", detalle)
+        return fila["id"]
+
+    def deshacer_cierre(self, plazo_id):
+        """Devuelve a `abierto` un plazo cerrado por error.
+
+        Existe porque el «Hecho» del abogado es un clic y los clics se dan sin
+        querer. Deshacer queda en el registro como cualquier otra cosa.
+        """
+        fila = self._plazo(plazo_id)
+        if fila["vida"] != "cumplido":
+            raise ValueError(f"El plazo {plazo_id} no está cumplido: está {fila['vida']}.")
+        self._cambiar_vida(fila["id"], "abierto", cerrado_por=None, cerrado_en=None)
+        self.registrar(fila["id"], "cierre_deshecho", f"estaba cumplido por {fila['cerrado_por']}")
+        return fila["id"]
+
+    def pausar_plazo(self, plazo_id, motivo):
+        """Suspende el plazo por un hecho registrado.
+
+        El motivo es obligatorio: una pausa sin causa anotada no se puede
+        explicar después, y explicar por qué una fecha es la que es forma parte
+        del contrato de todo lo que toca plazos.
+        """
+        if not motivo:
+            raise ValueError("Una pausa necesita motivo: sin él no se puede explicar la fecha.")
+        fila = self._plazo(plazo_id)
+        self._cambiar_vida(fila["id"], "en_pausa", motivo=motivo)
+        self.registrar(fila["id"], "plazo_en_pausa", motivo)
+        return fila["id"]
+
+    def reanudar_plazo(self, plazo_id, fecha_limite=None):
+        """Reanuda un plazo pausado, con la fecha que llega recalculada.
+
+        **La fecha nueva la trae quien reanuda.** Al reanudarse, el vencimiento
+        se mueve -- eso es lo que distingue una pausa de una marca decorativa --,
+        pero el cálculo es de `pro.caducidad`: aquí solo se guarda.
+        """
+        fila = self._plazo(plazo_id)
+        if fila["vida"] != "en_pausa":
+            raise ValueError(f"El plazo {plazo_id} no está en pausa: está {fila['vida']}.")
+        self._cambiar_vida(fila["id"], "abierto", motivo=None)
+        if fecha_limite:
+            self.conn.execute(
+                "UPDATE eventos SET inicio_local = ?, fin_local = ?, actualizado_en = ? WHERE id = ?",
+                (fecha_limite, fecha_limite, _ahora(), fila["id"]),
+            )
+            self.conn.commit()
+        self.registrar(fila["id"], "plazo_reanudado",
+                       f"nueva fecha {fecha_limite}" if fecha_limite else "sin fecha nueva")
+        return fila["id"]
+
+    def cancelar_plazo(self, plazo_id, motivo):
+        """Cancela el plazo por un motivo registrado. **Nunca se borra.**"""
+        if not motivo:
+            raise ValueError("Cancelar un plazo necesita motivo registrado.")
+        fila = self._plazo(plazo_id)
+        self._cambiar_vida(fila["id"], "cancelado", motivo=motivo)
+        self.registrar(fila["id"], "plazo_cancelado", motivo)
+        return fila["id"]
+
+    def _plazo(self, plazo_id):
+        fila = self.evento_por_identidad("", f"plazo:{plazo_id}")
+        if fila is None:
+            raise LookupError(f"No hay ningún plazo {plazo_id} en la agenda.")
+        return fila
+
+    def _cambiar_vida(self, fila_id, vida, **campos):
+        if vida not in VIDAS:
+            raise ValueError(f"Vida desconocida: {vida}. Las que hay: {', '.join(VIDAS)}.")
+        campos["vida"] = vida
+        campos["actualizado_en"] = _ahora()
+        asignaciones = ", ".join(f"{c} = ?" for c in campos)
+        self.conn.execute(
+            f"UPDATE eventos SET {asignaciones} WHERE id = ?",
+            tuple(campos.values()) + (fila_id,),
+        )
+        self.conn.commit()
 
     # --- consultas --------------------------------------------------------
 
@@ -422,3 +580,9 @@ class BaseDatos:
 
 def _ahora():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _hoy():
+    # Fecha local, no UTC: «hoy» para un plazo es el día del calendario en el
+    # que vive el abogado, y a las 00:30 en España UTC todavía va por ayer.
+    return date.today().isoformat()

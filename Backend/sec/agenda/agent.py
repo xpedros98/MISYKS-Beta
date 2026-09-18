@@ -159,6 +159,39 @@ class SecAgenda:
         self.db.registrar(fila_id, "apuntado", titulo)
         return fila_id
 
+    def hecho(self, plazo_id, fecha_presentacion=None):
+        """El «Hecho» del abogado: presentó por su cuenta, fuera de MISYKS.
+
+        No verifica nada ni comprueba nada: **informa de algo que el sistema no
+        puede ver**. Queda como cumplido *declarado*, no acreditado —no hay
+        justificante—, y `pro.acuse` necesita esa distinción para que la
+        auditoría separe lo que consta de lo que se ha dicho.
+
+        Sin esto, los avisos de un plazo ya presentado seguirían sonando, que es
+        la forma más rápida de que alguien deje de leerlos.
+        """
+        return self.db.cerrar_plazo(plazo_id, "abogado", fecha_presentacion)
+
+    def acusar(self, plazo_id, fecha_presentacion=None, justificante=None):
+        """Cierra el plazo con justificante. Lo llamará `pro.acuse`."""
+        return self.db.cerrar_plazo(plazo_id, "acuse", fecha_presentacion, justificante)
+
+    def deshacer(self, plazo_id):
+        """Devuelve a abierto un plazo cerrado por error."""
+        return self.db.deshacer_cierre(plazo_id)
+
+    def pausar(self, plazo_id, motivo):
+        """Suspende el plazo por un hecho registrado (conciliación previa, etc.)."""
+        return self.db.pausar_plazo(plazo_id, motivo)
+
+    def reanudar(self, plazo_id, fecha_limite=None):
+        """Reanuda el plazo con la fecha que trae quien reanuda, ya recalculada."""
+        return self.db.reanudar_plazo(plazo_id, fecha_limite)
+
+    def cancelar(self, plazo_id, motivo):
+        """Cancela el plazo por un motivo registrado. Nunca se borra."""
+        return self.db.cancelar_plazo(plazo_id, motivo)
+
     def clasificar(self, evento_id, tipo=None, abogado=None, expediente=None):
         """Dice qué es un evento del calendario: reunión, vista, obligación."""
         if self.db.evento(evento_id) is None:

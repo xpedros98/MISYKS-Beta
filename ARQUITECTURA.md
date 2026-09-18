@@ -1033,6 +1033,26 @@ Decisiones que conviene no perder:
 - **Lo clasificado a mano no se pisa.** Una sincronización posterior actualiza el
   título o la hora, pero no el `tipo` ni el `abogado`: eso lo puso alguien que sabía
   algo que la API no dice.
+- **La vida del plazo se recibe, y `vencido` se deriva.** `abierto · en_pausa ·
+  cumplido · cancelado` viven en columna propia —`estado` ya estaba ocupada por
+  `firme`/`provisional`, que dice otra cosa: si la fecha es fiable, no en qué punto
+  está el plazo—. `vencido` **no se guarda**: se calcula al leer, porque escribirlo
+  sería `sec.agenda` decidiendo que un plazo ha muerto, y este módulo no decide.
+  Además solo vence lo `firme`: con datos dudosos no hay vencido, hay provisional
+  (COMPONENTES.md, `pro.caducidad`).
+- **Cerrar un plazo guarda siempre la fecha de presentación**, también cuando se toma
+  la de hoy por defecto. No es burocracia: una presentación abre plazos futuros —el
+  del silencio administrativo se cuenta desde ella—, y cerrar sin fecha es uno de los
+  modos de fallo escritos del componente.
+- **Cumplido acreditado y cumplido declarado se distinguen en la fila.** `cerrado_por`
+  vale `acuse` (hay justificante) o `abogado` (presentó por su cuenta, fuera de
+  MISYKS), que es lo que `pro.acuse` necesita para que la auditoría separe lo que
+  consta de lo que se ha dicho. El «Hecho» se puede deshacer, y deshacerlo también
+  queda registrado.
+- **Lo que ponen las personas no se pisa.** `tipo`, `abogado`, la vida del plazo y
+  quién lo cerró están protegidos: una sincronización del calendario, o `procesal`
+  reanotando un vencimiento, cambian la fecha y el título pero nunca reabren en
+  silencio algo que ya se presentó.
 - **Escribir en el calendario es a petición.** `publicar` existe y `sincronizar` no
   escribe nunca. Publicar algo que vino del calendario se rechaza: lo duplicaría.
 - **Publicar adopta el identificador del proveedor.** Al crear el evento allí, la fila
@@ -1094,17 +1114,13 @@ Decisiones que conviene no perder:
   el abogado *es* la cuenta. Cruzar agendas entre abogados del despacho —que
   COMPONENTES.md exige— ya funciona en la consulta (las colisiones marcan `despacho`
   frente a `mismo_abogado`), pero hoy no hay de dónde sacar una segunda agenda.
-- **El «Hecho» del abogado y los estados del plazo, sin implementar.** Los define
-  `pro.caducidad` en COMPONENTES.md —un plazo vive `abierto · en_pausa · cumplido ·
-  vencido · cancelado`, y el abogado puede cerrarlo con un clic si presentó por su
-  cuenta fuera de MISYKS—. Lo que hay hoy en `sec.agenda` anota fechas y avisa si se
-  adelantan, pero un plazo no tiene estado: no se puede dar por cumplido, así que los
-  avisos de algo ya presentado seguirían sonando. Es la deuda más clara del módulo, y
-  arrastra también la distinción que pide `pro.acuse` entre cumplido **acreditado**
-  (con justificante) y cumplido **declarado** (por el abogado).
-- **Nadie llama a `anotar_plazo`.** Lo hará `pro.calendario` cuando tenga motor de
-  días. Mientras tanto se anota por la CLI, que es también como se comprueba que el
-  aviso de adelanto funciona.
+- **Nadie llama a `anotar_plazo` ni a las transiciones.** Las llamarán `pro.caducidad`
+  y `pro.acuse` cuando existan; el «Hecho» lo dará el abogado desde una pantalla que
+  tampoco existe. Mientras tanto todo se hace por la CLI, que es también como se
+  comprueba que funciona.
+- **La vida del plazo no dispara nada todavía.** Un plazo `cumplido` deja de avisar
+  cuando haya `sec.notificador`, que es quien avisa; hoy lo único que cambia es lo que
+  se ve al listar la agenda.
 - **Sin pantalla en el Frontend.** No hay vista de agenda; se usa por CLI.
 
 **Implementado — `expedientes`: la ficha, no la ruta**

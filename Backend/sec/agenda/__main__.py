@@ -8,6 +8,11 @@
     python -m sec.agenda clasificar ID --tipo T [--abogado L] [--expediente E]
     python -m sec.agenda plazo ID FECHA ASUNTO [--expediente E] [--organo O]
                                 [--estado firme|provisional] [--franja F]
+    python -m sec.agenda hecho ID [--fecha F]     lo presentó él, fuera de MISYKS
+    python -m sec.agenda deshacer ID              deshace un «Hecho» dado sin querer
+    python -m sec.agenda pausar ID MOTIVO         lo suspende (conciliación previa...)
+    python -m sec.agenda reanudar ID [FECHA]      lo reanuda con la fecha recalculada
+    python -m sec.agenda cancelar ID MOTIVO       lo cancela; nunca se borra
     python -m sec.agenda publicar ID                           lo escribe en el calendario
     python -m sec.agenda acciones [N]                          qué se ha hecho y cuándo
 
@@ -25,7 +30,7 @@ import sys
 
 from ..cuentas import consola
 from .agent import SecAgenda
-from .db import TIPOS
+from .db import TIPOS, vida_efectiva
 
 
 def main():
@@ -70,6 +75,25 @@ def main():
     s.add_argument("--estado", choices=("firme", "provisional"), default="firme")
     s.add_argument("--franja", choices=("holgado", "ajustado", "critico", "vencido"), default=None)
     s.add_argument("--abogado", default=None)
+
+    s = sub.add_parser("hecho", help="el abogado lo presentó por su cuenta, fuera de MISYKS")
+    s.add_argument("plazo_id")
+    s.add_argument("--fecha", default=None, help="fecha de presentación; por defecto, hoy")
+
+    s = sub.add_parser("deshacer", help="deshace el cierre de un plazo")
+    s.add_argument("plazo_id")
+
+    s = sub.add_parser("pausar", help="suspende un plazo por un hecho registrado")
+    s.add_argument("plazo_id")
+    s.add_argument("motivo")
+
+    s = sub.add_parser("reanudar", help="reanuda un plazo pausado")
+    s.add_argument("plazo_id")
+    s.add_argument("fecha", nargs="?", default=None, help="la nueva fecha, ya recalculada fuera")
+
+    s = sub.add_parser("cancelar", help="cancela un plazo por un motivo registrado")
+    s.add_argument("plazo_id")
+    s.add_argument("motivo")
 
     s = sub.add_parser("publicar", help="escribe en el calendario del abogado un evento nacido aquí")
     s.add_argument("id", type=int)
@@ -149,6 +173,24 @@ def ejecutar(args):
                 print(f"El plazo {args.plazo_id} sigue en {args.fecha}.")
             else:
                 print(f"Plazo {args.plazo_id} anotado para el {args.fecha} ({args.estado}).")
+        elif args.orden == "hecho":
+            agente.hecho(args.plazo_id, args.fecha)
+            print(f"Plazo {args.plazo_id} cumplido, por declaración del abogado "
+                  f"(presentado el {args.fecha or 'hoy'}). No hay justificante: "
+                  f"queda como declarado, no acreditado.")
+        elif args.orden == "deshacer":
+            agente.deshacer(args.plazo_id)
+            print(f"Plazo {args.plazo_id} vuelve a estar abierto.")
+        elif args.orden == "pausar":
+            agente.pausar(args.plazo_id, args.motivo)
+            print(f"Plazo {args.plazo_id} en pausa: {args.motivo}.")
+        elif args.orden == "reanudar":
+            agente.reanudar(args.plazo_id, args.fecha)
+            nueva = f" con fecha {args.fecha}" if args.fecha else " sin fecha nueva"
+            print(f"Plazo {args.plazo_id} reanudado{nueva}.")
+        elif args.orden == "cancelar":
+            agente.cancelar(args.plazo_id, args.motivo)
+            print(f"Plazo {args.plazo_id} cancelado: {args.motivo}. Sigue en la agenda.")
         elif args.orden == "publicar":
             identificador = agente.publicar(args.id)
             print(f"Evento {args.id} publicado en el calendario ({identificador}).")
@@ -164,6 +206,11 @@ def _linea(f):
     estado = ""
     if f["cancelado"]:
         estado = "  [ANULADO]"
+    elif f["vida"] and f["vida"] != "abierto":
+        estado = f"  [{f['vida']}]"
+    elif vida_efectiva(f) == "vencido":
+        # En mayúsculas porque es lo único de esta lista que no admite espera.
+        estado = "  [VENCIDO]"
     elif f["estado"] == "provisional":
         estado = "  [provisional]"
     return (

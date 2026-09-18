@@ -73,6 +73,11 @@ python -m sec.agenda colisiones                  # Compromisos que se pisan
 python -m sec.agenda apuntar TITULO FECHA        # Un compromiso propio (reunión, obligación)
 python -m sec.agenda clasificar ID --tipo TIPO   # Dice si aquel evento era una vista o un café
 python -m sec.agenda plazo ID FECHA ASUNTO       # Anota un plazo YA calculado (lo hará procesal)
+python -m sec.agenda hecho ID [--fecha F]        # Lo presentó él, fuera de MISYKS: cumplido
+python -m sec.agenda deshacer ID                 # Deshace un «Hecho» dado sin querer
+python -m sec.agenda pausar ID MOTIVO            # Suspende el plazo (conciliación previa...)
+python -m sec.agenda reanudar ID [FECHA]         # Lo reanuda con la fecha ya recalculada fuera
+python -m sec.agenda cancelar ID MOTIVO          # Lo cancela; nunca se borra
 python -m sec.agenda publicar ID                 # Escribe en el calendario del abogado, a petición
 python -m sec.agenda acciones [N]                # Qué se ha hecho sobre cada evento
 ```
