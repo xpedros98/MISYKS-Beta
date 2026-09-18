@@ -1,9 +1,10 @@
-# Arquitectura de agentes y tipos documentales
+# Arquitectura de componentes y tipos documentales
 
 > Modelo de organización del enrutado de MISYKS.
 > Última actualización: 2026-09-16
 
-**Naturaleza del documento.** Diseño completo del sistema de agentes. No se
+**Naturaleza del documento.** Diseño completo del sistema de componentes —agentes
+IA y módulos—. No se
 distingue entre lo implementado y lo pendiente salvo en §8.3, que recoge el estado
 real del código.
 
@@ -14,7 +15,7 @@ real del código.
   se considera el estado real del proyecto.
 - **Este documento se actualiza en el mismo cambio que lo motiva, no después.**
   Cualquier commit que altere una decisión de arquitectura, el estado de un
-  sub-agente (§8.3) o el contrato de un grupo debe traer también el ajuste
+  componente (§8.3) o el contrato de un grupo debe traer también el ajuste
   correspondiente aquí. Un `ARQUITECTURA.md` desactualizado es peor que no
   tenerlo: alguien lo lee y confía en algo que ya no es cierto.
 - **Detalle, no titulares.** Cuando algo cambie, se explica el porqué y las
@@ -28,29 +29,41 @@ real del código.
   consultarlo antes con el equipo. Que algo ya exista ahí no lo convierte en
   el diseño correcto para este proyecto.
 
-**Modelo.** Nueve grupos, no nueve agentes. Cada grupo es una familia de agentes muy
-acotados, cada uno con una sola tarea y un contrato estrecho. El grupo define el
-papel; los sub-agentes hacen el trabajo. Son 56 sub-agentes:
+**Modelo.** Nueve grupos, no nueve agentes generalistas. Cada grupo es una familia de
+piezas muy acotadas, cada una con una sola tarea y un contrato estrecho. El grupo define el
+papel; los componentes hacen el trabajo. Son 56 componentes:
 
 ```
 procesal 12 · redactor 6 · critico 6 · calculadora 6 · secretario 6
 archivador 5 · investigador 5 · probatorio 5 · estratega 5
 ```
 
+**Vocabulario.** Dos clases de componente, y la distinción manda en el diseño:
+
+| término | qué es |
+|---|---|
+| **agente IA**, o **agente** a secas | invoca un modelo de lenguaje; su salida se acota y se comprueba porque puede inventar |
+| **módulo** | código determinista, sin LLM; misma entrada, misma salida, y se audita leyéndolo |
+| **componente** | cualquiera de los dos, cuando da igual cuál |
+
+«Agente» sin más **siempre** significa agente IA. Cuando haga falta hablar del
+módulo de Python, este documento dirá *paquete*.
+
 **Stack.** Backend Python, frontend Rust con `iced` (arquitectura Elm). Cada
-sub-agente es un módulo bajo `Backend/<grupo>/<nombre>/`, con la misma anatomía:
-`agent.py` expone la interfaz al resto del sistema, y detrás quedan el cliente del
-canal, el parser, la base y la configuración.
+componente es un paquete bajo `Backend/<grupo>/<nombre>/`, con la misma anatomía:
+`agent.py` expone la interfaz al resto del sistema —el nombre del fichero es
+histórico y sirve igual para un módulo—, y detrás quedan el cliente del canal, el
+parser, la base y la configuración.
 
 **Convención de nombres.** `<grupo>.<nombre>` en el diseño, `Backend/sec/mail/` en
-disco. El sub-agente de correo es **`sec.mail`**.
+disco. El componente de correo es **`sec.mail`**, y es un módulo.
 
 ---
 
 ## 1 · Los nueve grupos
 
-Qué grupos hay, qué decide cada uno y cómo se componen. Los sub-agentes de cada
-grupo —56 en total, con sus reglas y contratos— están en **`AGENTES.md`**.
+Qué grupos hay, qué decide cada uno y cómo se componen. Los componentes de cada
+grupo —56 en total, con sus reglas y contratos— están en **`COMPONENTES.md`**.
 
 ### Cuatro familias por naturaleza de la decisión
 
@@ -70,24 +83,26 @@ candidatos, no una respuesta**.
 
 ---
 
-### Dónde corre cada agente
+### Dónde corre cada componente
 
-Eje de diseño distinto del anterior, y el que decide la infraestructura: **no todos
-los agentes son agentes de IA**.
+Eje de diseño distinto del anterior, y el que decide la infraestructura: **no todo
+componente es un agente IA**.
 
 | tipo | qué es | dónde corre | por qué |
 |---|---|---|---|
-| **Agente de software** | código determinista, sin LLM | donde están sus datos y sus credenciales | `sec.mail` tiene los tokens de acceso al buzón y lee contenido sin anonimizar: corre en el PC del letrado y eso no sale de ahí |
-| **Agente de IA** | invoca un modelo de lenguaje | **siempre en el servidor (`maat`)** | ahí está el modelo. Ollama con `qwen2.5:7b`, 12 núcleos y 62 GB de RAM; el portátil del letrado no sostiene eso, y replicarlo en cada equipo no tiene sentido |
+| **Módulo** | código determinista, sin LLM | donde están sus datos y sus credenciales | `sec.mail` tiene los tokens de acceso al buzón y lee contenido sin anonimizar: corre en el PC del letrado y eso no sale de ahí |
+| **Agente IA** | invoca un modelo de lenguaje | **siempre en el servidor (`maat`)** | ahí está el modelo. Ollama con `qwen2.5:7b`, 12 núcleos y 62 GB de RAM; el portátil del letrado no sostiene eso, y replicarlo en cada equipo no tiene sentido |
 
-Los nueve grupos de arriba describen **qué decide** cada agente, no dónde se ejecuta.
-La mayoría de los 56 sub-agentes son de IA y, por tanto, viven en `maat`; los que
-tocan un canal con credenciales (`sec.mail`, y más adelante `sec.entrega`) son de
-software y corren en local.
+Los nueve grupos de arriba describen **qué decide** cada componente, no dónde se
+ejecuta. Son módulos los doce de `procesal`, los seis de `calculadora` y los que
+tocan un canal con credenciales (`sec.mail`, y más adelante `sec.entrega`), que
+corren en local; el resto son agentes IA y viven en `maat`.
 
-Un sub-agente puede ser de software y aun así necesitar un paso de IA: `sec.mail`
-descarga y almacena en local, pero el **resumen** que consume `sec.clasificador` se
-genera en `maat` (§8.4). La frontera no es el sub-agente, es la llamada al modelo.
+Que un módulo dependa de un paso de IA no lo convierte en agente: `sec.mail`
+descarga y almacena en local sin tocar el modelo, y el **resumen** que consume
+`sec.clasificador` lo produce una llamada aparte, en `maat` (§8.4). La frontera no es
+la pieza, es quién hace la llamada: lo que decide un modelo se comprueba, lo que
+decide el código se lee.
 
 ### SECRETARIO · despacho
 El canal con **el mundo del despacho**: correo, agenda y avisos. No conoce los
@@ -273,12 +288,12 @@ con qué criterio.
 
 #### Qué no resuelve
 
-- **No desbloquea un cambio de arquitectura de agentes.** Que la seudonimización
+- **No desbloquea un cambio de arquitectura de componentes.** Que la seudonimización
   funcione permite *llamar a un modelo externo*; no cambia que los contratos de los
-  56 sub-agentes sean de una llamada, entrada estructurada → salida estructurada.
+  56 componentes sean de una llamada, entrada estructurada → salida estructurada.
   Adoptar un framework de agentes con bucle propio, herramientas de disco y shell
   sigue siendo un desajuste de forma, y sigue rompiendo el carácter auditable que
-  `AGENTES.md` exige al bloque determinista.
+  `COMPONENTES.md` exige al bloque determinista.
 - **No sostiene el argumento RGPD de §8.4.** `maat` está en la UE, así que enviarle
   datos no es transferencia internacional con o sin seudonimización. Anonimizar
   reduce el impacto de un acceso indebido al servidor; no cambia la base legal.
@@ -336,9 +351,9 @@ Ahí está todo el margen de coste.
 
 ---
 
-## 2 · Detalle de sub-agentes
+## 2 · Detalle de componentes
 
-Movido a **`AGENTES.md`**: qué hace cada sub-agente, su contrato, las reglas de
+Movido a **`COMPONENTES.md`**: qué hace cada componente, su contrato, las reglas de
 dominio que respeta, cómo falla y de qué depende. Aquí solo queda la arquitectura
 —cómo se componen los grupos, no el interior de cada uno.
 
@@ -394,7 +409,7 @@ capas del envoltorio. `procesal` responde de la **corrección**: `pro.calendario
 usa con clientes hasta superar su validación, y cuando le falta un dato da la fecha que
 obliga a actuar antes. `secretario` responde de la **visibilidad**: `sec.notificador`
 comprueba que los avisos se ven e insiste si no. Si falla cualquiera de las dos mitades,
-el plazo se pierde sin que nadie lo detecte. Detalle de ambos en `AGENTES.md`.
+el plazo se pierde sin que nadie lo detecte. Detalle de ambos en `COMPONENTES.md`.
 
 ---
 
@@ -437,7 +452,7 @@ Tres lecturas:
   Los otros cuatro son enrutables.
 - El **secretario dispara 22 rutas**, y **17 de esas 22** son justo las que activan
   `est.contrario`. Recibir y rebatir son la misma cadena.
-- **LexNET sirve a 59 de 89.** Los otros 30 salen por los demás sub-agentes de
+- **LexNET sirve a 59 de 89.** Los otros 30 salen por los demás módulos de
   `pro.salida`: tratarlo como destino único deja un tercio del catálogo sin camino.
 
 ```csv
@@ -537,7 +552,7 @@ provision_fondos,G,letrado,1,1,1,0,0,1,0,1,c,cliente
 
 ## 6 · Doce rutas de referencia
 
-Una por patrón, nombrando sub-agentes. Cubren los arquetipos A–G: cada tipo de esos
+Una por patrón, nombrando componentes. Cubren los arquetipos A–G: cada tipo de esos
 arquetipos hereda la ruta del suyo. Los 19 tipos de H, I y J aún no tienen ruta de
 referencia.
 
@@ -784,7 +799,7 @@ sec.agenda           avisos de vencimiento, prórroga y actualización anual
    sentencia, acto administrativo. Son tres prompts, no uno parametrizado.
 3. **`calculadora` separada del LLM.** Toda cifra que se defiende ante un juez sale
    de una función auditable.
-4. **Sub-agentes acotados, no agentes generalistas.** Un `cri.formal` que recorre el
+4. **Componentes acotados, no agentes generalistas.** Un `cri.formal` que recorre el
    art. 277 LECrim como lista cerrada es verificable; un «crítico» que opina sobre
    todo, no. La granularidad es lo que hace auditable el sistema.
 
@@ -797,8 +812,8 @@ sec.agenda           avisos de vencimiento, prórroga y actualización anual
 
 **Implementado — `sec.mail`**
 
-Primer sub-agente implementado. Correo por **Gmail API autenticada con OAuth**
-(§8.6) y almacenamiento local cifrado. Corre en el ordenador del letrado. **Hoy no
+Primer componente implementado, y es un módulo. Correo por **Gmail API autenticada
+con OAuth** (§8.6) y almacenamiento local cifrado. Corre en el ordenador del letrado. **Hoy no
 sube nada al servidor**: el resumen que lo haría sigue pendiente (más abajo). Cuando
 exista, subirá sin filtrar — `anonimizar` no está implementado (§1).
 
@@ -806,13 +821,13 @@ exista, subirá sin filtrar — `anonimizar` no está implementado (§1).
 |---|---|
 | interfaz al resto del sistema | `sec/mail/agent.py` |
 | interfaz `Correo`, común a los tres mundos | `sec/mail/correo.py` |
-| flujo OAuth (PKCE + loopback), tokens y renovación | `sec/mail/oauth.py` |
+| flujo OAuth (PKCE + loopback), tokens y renovación | `sec/cuentas/oauth.py` (compartido) |
 | adaptador de Gmail API | `sec/mail/google.py` |
 | adaptador de Microsoft Graph | `sec/mail/microsoft.py` |
-| cliente IMAP (tercer mundo, sin adaptador todavía) | `sec/mail/imap.py` |
 | parser de `.eml` | `sec/mail/parser.py` |
 | base SQLCipher | `sec/mail/db.py` |
-| tokens y clave de la base | `sec/mail/config.py` |
+| credenciales, tokens y claves de las bases | `sec/cuentas/ajustes.py` (compartido) |
+| IMAP y ruta de su base | `sec/mail/config.py` |
 | CLI | `sec/mail/__main__.py` |
 
 Superficie: `conectar · estado · desconectar · carpetas · sincronizar [--limite N] ·
@@ -854,7 +869,7 @@ Decisiones que conviene no perder:
   identificador resultante y la base se queda con ese. Una fila que apunte al
   identificador viejo no da error, simplemente deja de resolver.
 - **Cursor opaco por proveedor.** `historyId` en Google, `deltaLink` en Graph. El
-  agente lo guarda y lo devuelve sin interpretarlo. Si el proveedor lo rechaza por
+  módulo lo guarda y lo devuelve sin interpretarlo. Si el proveedor lo rechaza por
   antiguo (404 en Google, 410 en Graph) se hace inventario completo de la carpeta en
   vez de fallar: repetir identificadores es inofensivo, perderlos sería un correo que
   el despacho no ve.
@@ -868,7 +883,7 @@ Decisiones que conviene no perder:
 - **Inventario: el cursor se pide antes de listar.** Si se pidiera después, los
   correos llegados durante el recorrido quedarían por debajo del cursor y no los
   vería nadie nunca.
-- **Sincronización en solo lectura.** El agente lee sin marcar como leído: el letrado
+- **Sincronización en solo lectura.** El módulo lee sin marcar como leído: el letrado
   sigue viendo su bandeja intacta desde sus propios dispositivos.
 - **Sincronización en tandas.** `--limite N` corta la descarga a los N pendientes más
   antiguos; el resto se queda en la cola para la llamada siguiente.
@@ -889,7 +904,7 @@ Decisiones que conviene no perder:
   que poder guardar. Escribe solo su sección, con archivo temporal y reemplazo
   atómico, para que un corte no deje la configuración sin la clave de la base -- que
   dejaría la base ilegible.
-- **Registro de acciones** en tabla propia: todo lo que el agente hace sobre un correo
+- **Registro de acciones** en tabla propia: todo lo que el módulo hace sobre un correo
   queda anotado.
 
 **Migración desde la versión IMAP.** Las bases ya existentes se convierten al abrirlas
@@ -910,7 +925,7 @@ las tablas de las bases que ya pasaron por la versión defectuosa.
 
 **Pendiente**
 
-En `sec.mail`, respecto a lo descrito en `AGENTES.md`:
+En `sec.mail`, respecto a lo descrito en `COMPONENTES.md`:
 
 - el **resumen** que consume `sec.clasificador` y el parámetro **ventana** del contrato;
 - **descender por los reenvíos**: hoy un correo reenviado como adjunto se guarda entero
@@ -937,16 +952,236 @@ Del paso a OAuth:
 - **El consentimiento bloquea la interfaz.** Conectar una cuenta desde Ajustes lanza
   un subproceso síncrono que espera a que alguien acepte en el navegador. Es el
   candidato más claro a `Task` asíncrona de `iced`.
-- **Adaptador del tercer mundo.** `imap.py` sigue hablando de Gmail y usando sus
-  extensiones propias (`X-GM-MSGID`, `X-GM-LABELS`); para iCloud o Fastmail habrá que
-  sustituir la identidad estable por `Message-ID` o UID y quitar la lectura de
-  etiquetas.
+- **Adaptador del tercer mundo: no existe, y ya no hay esqueleto.** `imap.py` se ha
+  borrado. No lo importaba nadie —`correo.abrir()` solo conoce `google` y
+  `microsoft`— y lo que contenía era el Gmail de antes de OAuth: host fijo
+  `imap.gmail.com`, identidad por `X-GM-MSGID`, etiquetas propias de Gmail. Es decir,
+  justo las tres cosas que un adaptador de iCloud o Fastmail tendría que sustituir
+  —host configurable, `Message-ID` o UID como identidad, sin etiquetas—, así que
+  conservarlo no adelantaba trabajo y sí inducia a error a quien lo leyera. Cuando
+  toque ese mundo se escribe contra la interfaz `Correo`; el archivo está en el
+  historial de git. Con él se han ido `config.credenciales_imap`, `IMAP_HOST` y
+  `IMAP_PORT`; la sección `[imap]` de `~/.misyks/config` ya no la lee nadie.
+
+**Implementado — `sec.agenda`**
+
+Tercer componente con código, también módulo. Calendario por **Google Calendar API**
+con el mismo consentimiento OAuth que el correo (§8.6) y base local cifrada. Corre
+donde `sec.mail`, porque usa sus tokens.
+
+| pieza | fichero |
+|---|---|
+| interfaz al resto del sistema | `sec/agenda/agent.py` |
+| interfaz `Calendario`, común a los tres mundos | `sec/agenda/calendario.py` |
+| adaptador de Google Calendar | `sec/agenda/google.py` |
+| base SQLCipher | `sec/agenda/db.py` |
+| ruta de la base y ventana por defecto | `sec/agenda/config.py` |
+| CLI | `sec/agenda/__main__.py` |
+
+Superficie: `sincronizar · agenda · colisiones · clasificar · plazo · publicar ·
+acciones`. Tablas: `eventos · sincronizacion · acciones`, en `~/.misyks/sec_agenda.db`.
+
+**Lo compartido se ha separado: `sec/cuentas/`.** El consentimiento es uno por cuenta
+y trae correo y calendario juntos, así que la sección `[oauth.google]` no es de
+`sec.mail`. `oauth.py` y la parte genérica de su `config.py` (ahora `ajustes.py`)
+salen de dentro de `sec.mail` para que `sec.agenda` no tenga que importarlo solo para
+leer un token. `sec/mail/config.py` se queda con lo suyo —IMAP y la ruta de su base—
+y reexporta el resto, así que el código que lo usaba no cambia. `sec.mail` sigue
+funcionando igual: se ha comprobado contra la cuenta real después de moverlo.
+
+Decisiones que conviene no perder:
+
+- **Una sola tabla de eventos, con `tipo` y `origen`.** Una vista del calendario, una
+  reunión escrita a mano y un plazo que entrega `procesal` se miran juntos o no
+  sirven de nada. Lo que los diferencia —si se pueden mover, quién los produjo, si
+  son firmes— son columnas.
+- **Incremental y completo no son lo mismo, y confundirlos vacía la agenda.** En un
+  recorrido incremental, que un evento no venga significa que **no ha cambiado**;
+  solo tras un recorrido completo se puede concluir que ya no existe y cancelarlo.
+  Por eso `listar_eventos` devuelve también si hubo reinicio, y no basta con mirar si
+  había cursor: Google puede rechazarlo por antiguo (410) y responder completo.
+- **El cursor no se puede acotar, y tampoco acota él.** Al `syncToken` de Google no
+  se le pueden volver a mandar `timeMin`/`timeMax` (400), así que se guarda junto a la
+  ventana con la que se pidió y se descarta si se pide otra: reusarlo con otra ventana
+  daría una agenda con huecos que nadie notaría. Lo que **no** hace es respetar esa
+  ventana al contestar, aunque lo parezca. **Medido contra la API real:** dos eventos
+  anuales sin fecha de fin, y la primera sincronización incremental devolvió **147
+  ocurrencias**, expandidas hasta el año 2099. Aquí se había supuesto lo contrario, y
+  con el calendario vacío no se veía. El recorte por ventana lo hace ahora `agent.py`
+  sobre lo recibido, con una excepción necesaria: un evento que cae fuera **pero ya
+  está guardado** sí se acepta, porque es como se entera la agenda de que algo suyo se
+  ha movido fuera; descartarlo dejaría la fila vieja mintiendo. El adaptador no
+  recorta: no sabe qué hay guardado.
+- **Hora local e instante, los dos.** Un evento es una hora local con una zona, no un
+  instante (§8.6). Se guarda la hora que el letrado reconoce **y** el instante en UTC
+  que sale del desplazamiento del propio RFC 3339. Los solapes se comparan por
+  instante: hacerlo por hora local inventa colisiones entre zonas y silencia las
+  reales. El desplazamiento viene en el dato, así que no hace falta `zoneinfo` ni el
+  paquete `tzdata`, que en Windows habría sido una dependencia nueva.
+- **Las series las expande el proveedor** (`singleEvents=true`). Interpretar la regla
+  de repetición por nuestra cuenta es reescribir un calendario para equivocarse justo
+  en las excepciones, que es donde están los señalamientos que se mueven.
+- **Lo cancelado no se borra.** Un señalamiento que se cae es información; se marca y
+  queda en el registro de acciones.
+- **Lo clasificado a mano no se pisa.** Una sincronización posterior actualiza el
+  título o la hora, pero no el `tipo` ni el `letrado`: eso lo puso alguien que sabía
+  algo que la API no dice.
+- **Escribir en el calendario es a petición.** `publicar` existe y `sincronizar` no
+  escribe nunca. Publicar algo que vino del calendario se rechaza: lo duplicaría.
+- **Publicar adopta el identificador del proveedor.** Al crear el evento allí, la fila
+  pasa a `origen = 'calendario'` con el identificador que devuelve la API. Sin eso, la
+  sincronización siguiente traería el evento recién publicado como uno nuevo y
+  habría dos filas para el mismo compromiso.
+- **La ventana por defecto se cuadra a meses enteros, y no es cosmético.** El cursor
+  se guarda con la ventana que lo pidió y se descarta si se pide otra. Con una ventana
+  de «hoy ± N días», mañana la ventana ya es otra: el cursor no vale nunca y **todas
+  las sincronizaciones son completas**, con lo que el camino incremental existiría sin
+  llegar a usarse jamás. Se vio al día siguiente de escribirlo, midiendo tiempos.
+  Cuadrada al mes, cambia una vez cada treinta días: un recorrido completo al mes y el
+  resto incrementales.
+- **`showDeleted` solo en el incremental.** Ahí una baja *es* la noticia y llega como
+  un evento `cancelled`. En un recorrido completo, pedir los borrados **resucita
+  lápidas**: Google guarda un tiempo lo eliminado y lo devuelve igualmente, así que
+  cada recorrido completo volvía a crear la fila de algo borrado hace semanas
+  —comprobado con el evento de prueba—. En el completo, la baja se detecta por
+  ausencia, que es para lo que existe `marcar_ausentes_como_cancelados`.
+- **`apuntar` es la tercera entrada.** Ni del calendario ni de `procesal`: una reunión
+  acordada por teléfono, un cumpleaños, una obligación viva de un contrato ya cerrado
+  (arquetipo G). Admite `RRULE` para lo que se repite cada año, que solo viaja al
+  publicar: la agenda no expande series, eso lo hace el proveedor.
+- **Las columnas que faltan se añaden al abrir.** `CREATE TABLE IF NOT EXISTS` no toca
+  una tabla que ya existe, así que una columna añadida después no aparecería y la
+  primera escritura fallaría con `no such column`. `_anadir_columnas_que_falten` las
+  compara y añade lo que falte.
+- **La clave de `sec_agenda.db` la genera el Backend.** La de `sec.mail` la crea el
+  Frontend antes de invocarlo; la agenda no tiene pantalla todavía, y fallar
+  obligaría a pegar a mano un hexadecimal de 64 caracteres para poder guardar una
+  reunión. Cuando haya pantalla, esto pasa a leerse como el otro.
+- **Salida de consola tolerante (`sec/cuentas/consola.py`).** La consola de Windows es
+  cp1252: un título con un emoji o una flecha no imprimía un signo raro, lanzaba
+  `UnicodeEncodeError` y se llevaba la orden entera. Apareció escribiendo esto y
+  afectaba también a `sec.mail listar`, donde el asunto lo escribe cualquiera. Las dos
+  CLI lo aplican ahora.
+
+**Pendiente**
+
+- **Probado contra la API real** (2026-09-17, cuenta de desarrollo): alta de eventos,
+  serie anual expandida por el proveedor, recorrido completo, recorrido incremental,
+  baja de un evento borrado en Google —llega como `cancelled` y la fila queda anulada
+  sin borrarse— y el recorte por ventana. Lo que sigue **sin medir**: varias páginas
+  de resultados (hace falta un calendario con más de 2500 eventos), una ocurrencia
+  suelta movida o anulada dentro de una serie, y los eventos con zona horaria
+  distinta de la del calendario, que solo se han visto contra el adaptador falso.
+- **Tiempos medidos** (18/09/2026, calendario pequeño, portátil del letrado): consultar
+  lo ya guardado —`agenda`, `colisiones`— es instantáneo, 0,000 s, porque no toca red;
+  una llamada a la Calendar API, 0,37 s; una sincronización entera, 0,22 s. Google
+  entrega hasta 2500 eventos por página, así que un calendario normal de despacho cabe
+  en una sola petición. El coste real no está aquí sino en `sec.mail`, donde cada
+  correo nuevo es una descarga aparte: 0,40 s cuando no hay nada nuevo, y proporcional
+  al número de correos por bajar cuando lo hay. Por eso el correo va en tandas y el
+  calendario no lo necesita.
+- **Solo Google.** El adaptador de Microsoft Graph para calendario no está escrito;
+  `calendario.abrir` lo dice con todas las letras en vez de fallar de forma rara.
+  CalDAV (tercer mundo) tampoco.
+- **Un solo calendario y un solo letrado.** Se lee `primary` de la cuenta conectada, y
+  el letrado *es* la cuenta. Cruzar agendas entre letrados del despacho —que
+  COMPONENTES.md exige— ya funciona en la consulta (las colisiones marcan `despacho`
+  frente a `mismo_letrado`), pero hoy no hay de dónde sacar una segunda agenda.
+- **Nadie llama a `anotar_plazo`.** Lo hará `pro.calendario` cuando tenga motor de
+  días. Mientras tanto se anota por la CLI, que es también como se comprueba que el
+  aviso de adelanto funciona.
+- **Sin pantalla en el Frontend.** No hay vista de agenda; se usa por CLI.
+
+**Implementado — `expedientes`: la ficha, no la ruta**
+
+No es un componente: es el **almacén** al que se subordina lo demás, como `sec.cuentas`
+lo es de las credenciales. Un expediente es una instancia de un tipo documental, y el
+tipo determina ruta, plazos y canal de salida.
+
+| pieza | fichero |
+|---|---|
+| catálogo de los 89 tipos (dato) | `expedientes/datos/tipos.csv` |
+| plantilla de hitos por tipo (dato, **borrador**) | `expedientes/datos/hitos.csv` |
+| lectura y validación del catálogo | `expedientes/catalogo.py` |
+| base SQLCipher | `expedientes/db.py` |
+| interfaz al resto del sistema | `expedientes/agent.py` |
+| CLI | `expedientes/__main__.py` |
+| pantalla (iced) | `Frontend/src/screens/expedientes.rs` + `src/expedientes.rs` |
+| vista de un expediente: la barra de nodos | `Frontend/src/screens/detalle.rs` |
+
+Superficie: `tipos · abrir · listar · hitos · fechar · cerrar · eliminar · vaciar`.
+Tablas: `expedientes` e `hitos`, en `~/.misyks/expedientes.db` —cifrada, que aquí no hay
+debate: lleva el nombre del cliente y el del contrario—.
+
+Decisiones que conviene no perder:
+
+- **El catálogo es dato, no código.** Los 89 tipos salen de la matriz de activación de
+  §5 a un CSV. Añadir un tipo es añadir una línea, y lo puede revisar quien no
+  programa. Si CSV y §5 se separan, manda §5.
+- **El arquetipo y el destino se copian al abrir**, no se miran cada vez. Si mañana se
+  corrige la matriz, un expediente ya abierto no puede cambiar de ruta por su cuenta:
+  eso es lo que hace que un plazo calculado hace tres meses deje de poder explicarse.
+- **La referencia la pone la base** (`EXP-2026-001`), dentro de la misma transacción que
+  la inserción —dos expedientes abiertos a la vez se llevarían el mismo número— y
+  contando sobre las referencias del año, no sobre el total de filas: borrar no puede
+  hacer que el siguiente repita un número que ya se usó en un escrito.
+- **Cerrar y eliminar son cosas distintas.** Cerrar lo saca de los abiertos y lo deja;
+  eliminar no deja rastro. Hoy eliminar vale porque un expediente es una ficha; en
+  cuanto cuelguen documentos, plazos y acuses, tendrá que pasar a ser una operación con
+  motivo y registro.
+- **Borrar todo pide dos pulsaciones y dice cuántos se lleva.** En la CLI la
+  confirmación es `--si`; sin él, la orden dice qué iba a borrar y no borra nada.
+- **Leer directo, escribir por el Backend.** El Frontend lee la base con `rusqlite` y
+  escribe invocando `python -m expedientes`. Una lectura desincronizada enseña un dato
+  de menos; una escritura desincronizada corrompe.
+- **Los hitos son del expediente, no del tipo.** Se copian de la plantilla al abrirlo
+  y a partir de ahí son suyos: un expediente abierto hace tres meses sigue enseñando el
+  recorrido con el que nació, aunque la plantilla se haya corregido. Misma razón que
+  con el arquetipo.
+- **Cuatro clases de hito, y cada una espera otra cosa de su fecha.** `acto` (ocurre y
+  se fecha cuando ocurre), `limite` (un plazo, y la fecha es el último día: la
+  calculará `pro.calendario`), `senalamiento` (lo fija el juzgado, y hasta entonces no
+  hay fecha —y eso es el estado normal, no un hueco—) y `resolucion` (llega cuando
+  llega). La fecha lleva además su **clase**: `real · limite · provisional ·
+  sin_senalar`. Sin esa distinción, «el 2 de octubre» como tope propio y «el 2 de
+  octubre» como día de vista se leen igual, que es justo el error caro.
+- **La barra no avanza sola.** Un hito pasa a `ocurrido` cuando alguien aporta la
+  prueba —hoy una persona por la CLI; mañana el acuse de `pro.acuse` o la notificación
+  de LexNET—. Si el sistema pudiera marcarlo por su cuenta, antes o después daría por
+  presentado algo que no lo está.
+- **La plantilla de hitos es un borrador y la interfaz lo dice.** Hay cinco tipos de
+  los 89, redactados a partir de los artículos que ya citan §6 y §7, y **ninguno lo ha
+  revisado un abogado**: la columna `revisado` dice `no` en todas las filas y la
+  pantalla lo advierte en rojo. Una barra que parece definitiva sin serlo es peor que
+  no tenerla.
+- **Un tipo sin plantilla no inventa nodos.** Dice que su recorrido no está escrito.
+- **`Frontend/src/backend.rs`.** Localizar la carpeta del Backend y elegir intérprete
+  estaba dentro de `secretario.rs` porque `sec.mail` era lo único que se invocaba. Con
+  dos módulos ya no es de ninguno: mismo movimiento que `sec/cuentas` en el Backend.
+
+**Pendiente**
+
+- **Los hitos, revisados.** Hay plantilla para 5 de los 89 tipos y es un **borrador
+  sin validar**: lo escribió el asistente a partir de los artículos que ya citan §6 y
+  §7, no un abogado. Hasta que alguien los revise —y ponga `revisado=si` en el CSV— la
+  pantalla los marca en rojo. Faltan los otros 84 tipos.
+- **Las fechas `limite` hay que teclearlas.** Las tendría que producir
+  `pro.calendario` en cuanto exista el motor de días; hoy se ponen con
+  `expedientes fechar`, y aquí no se computa nada, igual que en `sec.agenda`.
+- **Los expedientes abiertos antes de que existiera la tabla `hitos` no tienen
+  ninguno**, y no se les añaden solos: la pantalla los enseña como un tipo sin
+  recorrido escrito.
+- **Poner fechas solo se puede por CLI.** La pantalla enseña la barra; no deja tocarla.
+- **Nada cuelga todavía del expediente**: ni documentos, ni correos, ni los eventos de
+  `sec.agenda`, que ya tiene la columna `expediente` sin rellenar.
+- **Sin partes ni órgano desde la interfaz.** La base los guarda; la pantalla solo pide
+  el tipo.
 
 **Implementado a medias — `pro.calendario`: el calendario, no el motor**
 
-Segundo sub-agente con código. Está escrita **la fuente de datos** —el calendario de
-festivos y el recolector que lo llena desde los boletines— y **no el cómputo de
-plazos**, que es el agente propiamente dicho. Importar el paquete no permite calcular
+Segundo componente con código, también módulo. Está escrita **la fuente de datos**
+—el calendario de festivos y el recolector que lo llena desde los boletines— y **no
+el cómputo de plazos**, que es el módulo propiamente dicho. Importar el paquete no permite calcular
 ninguna fecha todavía.
 
 | pieza | fichero |
@@ -989,7 +1224,7 @@ Decisiones que conviene no perder:
   que hace que una regresión no se disfrace de trabajo pendiente.
 - **Nada se borra: `alta` y `baja` por versión.** Las comunidades rectifican con el
   año empezado. Toda consulta acepta una versión, así que el `version_calendario` que
-  el contrato del sub-agente devuelve basta para repetir un cálculo tal como se hizo.
+  el contrato del módulo devuelve basta para repetir un cálculo tal como se hizo.
 - **Los ámbitos son un árbol, no una tabla de municipios.** `08019 → ES-CT → ES`, con
   un nivel insular intercalado donde existe (Canarias, Baleares). El motor recorre la
   cadena sin saber cuántos niveles tiene.
@@ -1218,7 +1453,10 @@ tercer mundo de la tabla.
 | CalDAV/IMAP | IMAP con contraseña de aplicación | CalDAV con contraseña de aplicación | iCloud, Fastmail, Nextcloud, Zimbra, servidores propios |
 
 Los dos primeros mundos van por OAuth y comparten pantalla de consentimiento. El
-tercero usa contraseña de aplicación, y es el único que emplea `imap.py`.
+tercero usa contraseña de aplicación y **no está implementado**: no hay adaptador de
+IMAP ni de CalDAV (§8.3). Que la autenticación básica siga retirada en Google y en
+Exchange Online no afecta a este mundo: iCloud, Fastmail y los servidores propios
+siguen admitiéndola, y para ellos no hay otra vía.
 
 **Determinación del mundo.** Por los registros MX del dominio: `...google.com`,
 `...protection.outlook.com`, u otro. Un dominio propio alojado en Google Workspace o
@@ -1239,8 +1477,8 @@ Requisitos de publicación:
 
 Ambos trámites se miden en semanas y son independientes del desarrollo.
 
-**Scopes.** El mínimo que cubre el contrato del agente. `calendar.events` da lectura y
-escritura de eventos; `calendar` completo no se solicita.
+**Scopes.** El mínimo que cubre el contrato del componente. `calendar.events` da
+lectura y escritura de eventos; `calendar` completo no se solicita.
 
 **Restricciones del entorno.** Externas al proyecto:
 
@@ -1293,13 +1531,18 @@ con `Correo` y `Calendario` -- esta última con `listar_eventos(desde, hasta)`,
 
 **Almacenamiento de credenciales.** Las secciones `[oauth.google]` y
 `[oauth.microsoft]` de `~/.misyks/config` guardan, cada una, el `client_id` de la
-aplicación y los tokens de la cuenta conectada. Le aplican el recorte de permisos y el orden de escritura de `save()`
+aplicación y los tokens de la cuenta conectada. Como el consentimiento es uno por
+cuenta y cubre los dos scopes, el flujo y el archivo viven en `sec/cuentas/`
+(`oauth.py`, `ajustes.py`) y no dentro de `sec.mail`: los dos módulos entran por ahí.
+Habilitar la API correspondiente en el proyecto del `client_id` es un paso aparte del
+scope —Gmail y Calendar se habilitan por separado, y sin ello la llamada responde
+`403` aunque el consentimiento sea correcto—. Le aplican el recorte de permisos y el orden de escritura de `save()`
 de §8.5.
 
 **Ubicación de los tokens: sin decidir.** Si `sec.agenda` corre en `maat`, los refresh
 tokens de todos los clientes residen en el servidor; `sec.mail` corre en local por
-tener las credenciales (§8.3). Factores en juego: un agente de vigilancia de plazos
-debe operar con el equipo del letrado apagado, y un repositorio único de credenciales
+tener las credenciales (§8.3). Factores en juego: un componente de vigilancia de
+plazos debe operar con el equipo del letrado apagado, y un repositorio único de credenciales
 de todos los clientes concentra el impacto de un acceso indebido.
 ---
 
@@ -1315,6 +1558,6 @@ verdad un despacho generalista— pero solo 12 se revisaron con detalle de plazo
 preceptos. Alguna asignación de arquetipo es discutible: `monitorio` figura en B por
 el peso del cálculo, pero tiene tanto de H por el requerimiento previo.
 
-**Sobre los sub-agentes.** Los 56 son una propuesta de granularidad, no un contrato
-cerrado. El criterio aplicado: un sub-agente por tarea que pueda fallar de forma
+**Sobre los componentes.** Los 56 son una propuesta de granularidad, no un contrato
+cerrado. El criterio aplicado: un componente por tarea que pueda fallar de forma
 independiente y verificarse por separado.
