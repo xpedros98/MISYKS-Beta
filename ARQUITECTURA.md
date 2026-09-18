@@ -1040,8 +1040,9 @@ donde `sec.mail`, porque usa sus tokens.
 | ruta de la base y ventana por defecto | `sec/agenda/config.py` |
 | CLI | `sec/agenda/__main__.py` |
 
-Superficie: `sincronizar · agenda · colisiones · clasificar · plazo · publicar ·
+Superficie: `sincronizar · agenda · colisiones · apuntar · clasificar · publicar ·
 acciones`. Tablas: `eventos · sincronizacion · acciones`, en `~/.misyks/sec_agenda.db`.
+Los plazos no están entre ellas: son hitos del expediente y aquí solo se proyectan.
 
 **Lo compartido se ha separado: `sec/cuentas/`.** El consentimiento es uno por cuenta
 y trae correo y calendario juntos, así que la sección `[oauth.google]` no es de
@@ -1183,8 +1184,9 @@ tipo determina ruta, plazos y canal de salida.
 | pantalla (iced) | `Frontend/src/screens/expedientes.rs` + `nucleo/src/expedientes.rs` |
 | vista de un expediente: la barra de nodos | `Frontend/src/screens/detalle.rs` |
 
-Superficie: `tipos · abrir · listar · hitos · fechar · cerrar · eliminar · vaciar`.
-Tablas: `expedientes` e `hitos`, en `~/.misyks/expedientes.db` —cifrada, que aquí no hay
+Superficie: `tipos · abrir · listar · hitos · fechar · hecho · deshacer · pausar ·
+reanudar · prorrogar · cancelar · acciones · cerrar · eliminar · vaciar`. Tablas:
+`expedientes · hitos · acciones`, en `~/.misyks/expedientes.db` —cifrada, que aquí no hay
 debate: lleva el nombre del cliente y el del contrario—.
 
 Decisiones que conviene no perder:
