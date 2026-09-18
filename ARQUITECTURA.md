@@ -861,6 +861,25 @@ casos, mismos días y mismas lagunas-- pero eso es una comprobación puntual, no
 mecanismo; si el acoplamiento crece, la alternativa es que el frontend pida los datos
 por la CLI.
 
+**Dos caras en dos pestañas: Despacho y Control.** Arriba se elige la cara, debajo
+aparecen solo sus secciones. **Despacho** es el trabajo del día —Inicio, Expedientes,
+Secretario—; **Control** es mirar cómo está el sistema —Calendario, Ajustes—. El reparto
+no lo decidió esta pantalla: `calendario.rs` ya decía en su cabecera «el abogado no va a
+abrir esto», porque enseña la cobertura del calendario de festivos y sus averías, no los
+plazos de nadie.
+
+**No es seguridad, es atención.** La base y la configuración están en la misma máquina y
+quien edite un fichero de texto ve lo que quiera. Lo que se gana es que una pantalla de
+mantenimiento no se cruce en medio del trabajo, y que una de trabajo no esconda lo que se
+ha roto.
+
+Cada cara recuerda dónde se estaba, o cruzar a mirar algo costaría tres clics de vuelta.
+Y hay una excepción deliberada al reparto: **una cuenta revocada se avisa en Despacho**,
+con un botón que lleva a Ajustes. Esconder Ajustes en Control dejaba al abogado sin saber
+que su permiso había caducado —y eso no da ningún error: simplemente deja de entrar
+correo, cada siete días mientras la app de Google siga en *Testing*—. Lo que se ha roto
+se enseña donde se está trabajando, no donde habría que ir a mirarlo.
+
 **Conectar cuenta ya no bloquea la ventana.** Era el último bloqueo síncrono dentro de
 `update`, y el peor: espera a que una persona elija cuenta en el navegador, hasta cinco
 minutos. Mientras tanto el bucle de eventos de `iced` estaba parado, la ventana no

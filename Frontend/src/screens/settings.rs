@@ -89,6 +89,19 @@ impl SettingsState {
         self.refrescar();
     }
 
+    /// La cuenta cuyo permiso ha dejado de valer, si la hay.
+    ///
+    /// Hace falta fuera de esta pantalla: desde que Ajustes vive en Control, el
+    /// abogado trabaja sin verla, y una cuenta revocada **no da ningun error**
+    /// -- simplemente deja de entrar correo --. Con la app de Google en estado
+    /// *Testing* eso pasa cada siete dias.
+    pub fn revocada(&self) -> Option<&str> {
+        self.cuentas
+            .iter()
+            .find(|(_, estado, _)| estado == "revocado")
+            .map(|(proveedor, _, _)| proveedor.as_str())
+    }
+
     /// Si hay al menos una cuenta usable, para saber si tiene sentido
     /// sincronizar nada mas volver de Ajustes.
     pub fn hay_cuenta(&self) -> bool {
