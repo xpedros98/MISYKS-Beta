@@ -16,7 +16,7 @@ use iced::widget::{button, column, row, text};
 use iced::Element;
 
 use crate::app::Message;
-use crate::secretario;
+use nucleo::secretario;
 
 pub const PROVEEDORES: [&str; 2] = ["google", "microsoft"];
 

@@ -4,17 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-iced = "0.14"
-
-# sec.mail corre en local (mismo ordenador que la app), sin Keychain: la
-# clave de la base SQLCipher vive en ~/.misyks/config (ver src/local_config.rs).
-# vendored-openssl para que compile igual en cualquier plataforma sin pedir
-# librerias de sistema adicionales.
-rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
-
-# RNG del propio sistema operativo (getrandom(2) en Linux, BCryptGenRandom en
-# Windows) para la clave de sec_mail.db. No es una crate de criptografia: es el
-# envoltorio portable de la llamada del SO, que es lo que antes se hacia a mano
-# leyendo /dev/urandom -- y eso dejaba a Windows sin compilar. La version ya
-# estaba en Cargo.lock como dependencia transitiva de iced.
-getrandom = "0.3"
+iced = { workspace = true }
+# Lo compartido con la aplicacion de control: acceso a datos, invocacion del
+# Backend, configuracion local y estilos.
+nucleo = { path = "../nucleo" }

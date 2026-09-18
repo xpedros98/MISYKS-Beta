@@ -1,0 +1,20 @@
+[package]
+name = "nucleo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# `iced` esta aqui por `estilo.rs`, que define la paleta y las piezas visuales
+# comunes; el resto del crate no sabe nada de interfaz.
+iced = { workspace = true }
+
+# sec.mail corre en local (mismo ordenador que la app), sin Keychain: la clave
+# de la base SQLCipher vive en ~/.misyks/config (ver local_config.rs).
+# vendored-openssl para que compile igual en cualquier plataforma sin pedir
+# librerias de sistema adicionales.
+rusqlite = { workspace = true }
+
+# RNG del propio sistema operativo (getrandom(2) en Linux, BCryptGenRandom en
+# Windows) para la clave de sec_mail.db. No es una crate de criptografia: es el
+# envoltorio portable de la llamada del SO.
+getrandom = { workspace = true }

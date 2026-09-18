@@ -2,7 +2,7 @@ use iced::widget::{button, column, container, row, scrollable, text};
 use iced::{Element, Length};
 
 use crate::app::Message;
-use crate::secretario::{EmailSummary, SecMailError};
+use nucleo::secretario::{EmailSummary, SecMailError};
 
 pub fn view<'a>(
     emails: &'a Result<Vec<EmailSummary>, SecMailError>,

@@ -2,12 +2,12 @@ use iced::widget::{button, column, row};
 use iced::Element;
 use iced::{Length, Task};
 
-use crate::expedientes::TipoDoc;
-use crate::screens::calendario::CalendarioState;
+use nucleo::expedientes::TipoDoc;
+
 use crate::screens::expedientes::ExpedientesState;
 use crate::screens::settings::SettingsState;
-use crate::screens::{self, Modo, Screen};
-use crate::secretario::{self, EmailSummary, SecMailError};
+use crate::screens::{self, Screen};
+use nucleo::secretario::{self, EmailSummary, SecMailError};
 
 // Cuantos correos NUEVOS se bajan por cada pulsacion de Refrescar.
 const TANDA_SINCRONIZACION: i64 = 5;
@@ -17,15 +17,7 @@ const TANDA_SINCRONIZACION: i64 = 5;
 const LIMITE_LISTA: i64 = -1;
 
 pub struct State {
-    modo: Modo,
-    /// La ultima seccion visitada en cada cara. Volver a Control y encontrarse
-    /// donde se estaba es lo que distingue dos pestanas de dos aplicaciones
-    /// pegadas: si cada cambio devolviera al principio, cruzar de una a otra
-    /// para mirar algo costaria tres clics de vuelta.
-    ultima_despacho: Screen,
-    ultima_control: Screen,
     current_screen: Screen,
-    calendario: CalendarioState,
     expedientes: ExpedientesState,
     secretario_emails: Result<Vec<EmailSummary>, SecMailError>,
     secretario_sync: Option<Result<String, SecMailError>>,
@@ -35,16 +27,12 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            modo: Modo::default(),
-            ultima_despacho: Modo::Despacho.inicio(),
-            ultima_control: Modo::Control.inicio(),
             current_screen: Screen::default(),
             // Lectura sincrona: es un fichero SQLite local, no una llamada de
             // red, asi que se resuelve en el arranque sin necesitar un Task
             // async todavia.
             secretario_emails: secretario::list_emails(LIMITE_LISTA),
             secretario_sync: None,
-            calendario: CalendarioState::cargar(),
             expedientes: ExpedientesState::cargar(),
             settings: SettingsState::cargar(),
         }
@@ -54,13 +42,10 @@ impl Default for State {
 #[derive(Debug, Clone)]
 pub enum Message {
     NavigateTo(Screen),
-    CambiarModo(Modo),
     ConectarCuenta(String),
     CuentaConectada(Result<String, SecMailError>),
     DesconectarCuenta(String),
     RefrescarSecretario,
-    CalendarioAmbito(String),
-    CalendarioComputo(usize),
     ExpedienteTipo(TipoDoc),
     ExpedienteAbrir(i64),
     HitoHecho(i64, i64),
@@ -80,23 +65,7 @@ pub enum Message {
 /// que tarda. Todo lo demas sigue siendo sincrono y devuelve `Task::none()`.
 pub fn update(state: &mut State, message: Message) -> Task<Message> {
     match message {
-        Message::NavigateTo(screen) => {
-            // Ir a una seccion lleva tambien a su cara: el aviso de cuenta
-            // revocada se pulsa desde Despacho y Ajustes esta en Control.
-            state.modo = screen.modo();
-            state.current_screen = screen;
-            match screen.modo() {
-                Modo::Despacho => state.ultima_despacho = screen,
-                Modo::Control => state.ultima_control = screen,
-            }
-        }
-        Message::CambiarModo(modo) => {
-            state.modo = modo;
-            state.current_screen = match modo {
-                Modo::Despacho => state.ultima_despacho,
-                Modo::Control => state.ultima_control,
-            };
-        }
+        Message::NavigateTo(screen) => state.current_screen = screen,
         Message::ConectarCuenta(proveedor) => {
             // Devuelve ya, con la pantalla diciendo que mire el navegador; la
             // respuesta llega luego como `CuentaConectada`.
@@ -110,8 +79,6 @@ pub fn update(state: &mut State, message: Message) -> Task<Message> {
         }
         Message::DesconectarCuenta(proveedor) => state.settings.desconectar(&proveedor),
         Message::RefrescarSecretario => sincronizar_y_recargar(state),
-        Message::CalendarioAmbito(ambito) => state.calendario.seleccionar(ambito),
-        Message::CalendarioComputo(computo) => state.calendario.cambiar_computo(computo),
         Message::ExpedienteTipo(tipo) => state.expedientes.elegir_tipo(tipo),
         Message::ExpedienteAbrir(id) => state.expedientes.abrir_detalle(id),
         Message::HitoHecho(expediente, orden) => state.expedientes.marcar_hito(expediente, orden),
@@ -134,32 +101,17 @@ fn sincronizar_y_recargar(state: &mut State) {
 }
 
 pub fn view(state: &State) -> Element<'_, Message> {
-    // Dos barras, y en este orden: arriba la cara, debajo sus secciones. Una
-    // sola fila con las cinco secciones mezcladas obligaba a saberse cual es de
-    // cada cosa; asi la segunda fila solo ensena lo que corresponde.
-    let caras = crate::estilo::barra(
-        row![
-            modo_button(Modo::Despacho, state.modo),
-            modo_button(Modo::Control, state.modo),
-            iced::widget::Space::new().width(Length::Fill),
-            crate::estilo::tenue(state.modo.descripcion()),
-        ]
-        .spacing(4)
-        .align_y(iced::Alignment::Center),
-    )
-    .width(Length::Fill);
-
     let mut secciones = row![].spacing(4);
-    for pantalla in state.modo.pantallas() {
+    for pantalla in Screen::TODAS {
         secciones = secciones.push(nav_button(*pantalla, state.current_screen));
     }
-    let nav = column![caras, crate::estilo::barra(secciones).width(Length::Fill)].spacing(6);
+    let nav = nucleo::estilo::barra(secciones).width(Length::Fill);
 
     // Lo que se ha roto se ensena donde se esta trabajando, no donde habria que
     // ir a mirarlo. Una cuenta revocada no da ningun error: deja de entrar
     // correo, y nadie se entera hasta que falta algo.
-    let aviso: Element<Message> = match (state.modo, state.settings.revocada()) {
-        (Modo::Despacho, Some(proveedor)) => crate::estilo::tarjeta(
+    let aviso: Element<Message> = match state.settings.revocada() {
+        Some(proveedor) => nucleo::estilo::tarjeta(
             row![
                 iced::widget::text(format!(
                     "El permiso de la cuenta de {proveedor} ya no vale: no esta entrando correo."
@@ -174,7 +126,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
         )
         .width(Length::Fill)
         .into(),
-        _ => iced::widget::Space::new().height(0).into(),
+        None => iced::widget::Space::new().height(0).into(),
     };
 
     let content = match state.current_screen {
@@ -183,25 +135,10 @@ pub fn view(state: &State) -> Element<'_, Message> {
             screens::secretario::view(&state.secretario_emails, &state.secretario_sync)
         }
         Screen::Expedientes => screens::expedientes::view(&state.expedientes),
-        Screen::Calendario => screens::calendario::view(&state.calendario),
         Screen::Ajustes => screens::settings::view(&state.settings),
     };
 
     column![nav, aviso, content].spacing(16).padding(16).height(Length::Fill).into()
-}
-
-/// La pestana de una cara. Lleva su color, como las secciones, para que se vea
-/// de un vistazo en cual se esta.
-fn modo_button(target: Modo, current: Modo) -> Element<'static, Message> {
-    let activa = target == current;
-    let boton = button(target.label())
-        .padding([6, 16])
-        .style(crate::estilo::pestana(target.color(), activa));
-    if activa {
-        boton.into()
-    } else {
-        boton.on_press(Message::CambiarModo(target)).into()
-    }
 }
 
 fn nav_button(target: Screen, current: Screen) -> Element<'static, Message> {
@@ -211,7 +148,7 @@ fn nav_button(target: Screen, current: Screen) -> Element<'static, Message> {
     // pestanas quedan transparentes.
     let boton = button(target.label())
         .padding([6, 14])
-        .style(crate::estilo::pestana(target.color(), activa));
+        .style(nucleo::estilo::pestana(target.color(), activa));
     if activa {
         boton.into()
     } else {

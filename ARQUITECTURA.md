@@ -844,15 +844,15 @@ acciones`.
 El Backend sigue sin más dependencia que `sqlcipher3`: el flujo OAuth y las dos APIs
 van con la librería estándar (`urllib`, `http.server`).
 
-Frontend (`iced`): pantalla **Calendario** nueva (`src/calendario.rs` +
-`src/screens/calendario.rs`), que lee `calendario.db` en **solo lectura** y sin clave
+Frontend (`iced`): pantalla **Calendario** (hoy `nucleo/src/calendario.rs` +
+`Frontend_Admin/src/screens/calendario.rs`), que lee `calendario.db` en **solo lectura** y sin clave
 --no está cifrada-- y muestra la cobertura por nivel, las averías con su motivo y los
 días inhábiles de un municipio con la marca de qué nivel aporta cada uno. Es vista de
 mantenimiento, no del día a día: existe para que el calendario no envejezca en
 silencio. La cadena de ámbitos se resuelve con un **CTE recursivo** en SQL, así que el
 frontend no necesita saber cuántos niveles hay.
 
-Sobre el **acoplamiento de esquema**: `secretario.rs` y `calendario.rs` conocen el
+Sobre el **acoplamiento de esquema**: `nucleo/src/secretario.rs` y `nucleo/src/calendario.rs` conocen el
 esquema de las bases que escribe el Backend, y nada ata las dos mitades. Mitigación en
 `calendario.rs`: `comprobar_esquema` verifica las columnas que usa y falla nombrando
 la que falte, en vez de devolver una lista vacía que parece un calendario sin
@@ -861,24 +861,51 @@ casos, mismos días y mismas lagunas-- pero eso es una comprobación puntual, no
 mecanismo; si el acoplamiento crece, la alternativa es que el frontend pida los datos
 por la CLI.
 
-**Dos caras en dos pestañas: Despacho y Control.** Arriba se elige la cara, debajo
-aparecen solo sus secciones. **Despacho** es el trabajo del día —Inicio, Expedientes,
-Secretario—; **Control** es mirar cómo está el sistema —Calendario, Ajustes—. El reparto
-no lo decidió esta pantalla: `calendario.rs` ya decía en su cabecera «el abogado no va a
-abrir esto», porque enseña la cobertura del calendario de festivos y sus averías, no los
-plazos de nadie.
+**Dos aplicaciones, no dos modos de una.** `Frontend` es la del abogado y
+`Frontend_Admin` la de control, y se compilan por separado: el binario que recibe un
+despacho **no lleva dentro** las pantallas de mantenimiento. Un interruptor las habría
+escondido, no quitado.
 
-**No es seguridad, es atención.** La base y la configuración están en la misma máquina y
-quien edite un fichero de texto ve lo que quiera. Lo que se gana es que una pantalla de
-mantenimiento no se cruce en medio del trabajo, y que una de trabajo no esconda lo que se
-ha roto.
+| | abogado (`misyks-beta-frontend`) | control (`misyks-beta-admin`) |
+|---|---|---|
+| secciones | Inicio · Expedientes · Secretario · Ajustes | Calendario (cobertura y averías) |
+| para quién | el despacho | el equipo que mantiene MISYKS |
+| título | MISYKS — Usuario | MISYKS — Administrador |
+| fondo | claro | **negro** |
 
-Cada cara recuerda dónde se estaba, o cruzar a mirar algo costaría tres clics de vuelta.
-Y hay una excepción deliberada al reparto: **una cuenta revocada se avisa en Despacho**,
-con un botón que lleva a Ajustes. Esconder Ajustes en Control dejaba al abogado sin saber
-que su permiso había caducado —y eso no da ningún error: simplemente deja de entrar
-correo, cada siete días mientras la app de Google siga en *Testing*—. Lo que se ha roto
-se enseña donde se está trabajando, no donde habría que ir a mirarlo.
+**El fondo distingue antes que el título.** Las dos se parecen —misma barra, mismas
+tarjetas— y van a estar abiertas a la vez en la misma pantalla: confundirlas es tocar el
+mantenimiento creyendo que trabajas. Funciona porque aquí el texto no lleva color fijo,
+sale del tema; un gris fijo habría quedado invisible sobre negro.
+
+El reparto no lo decidió este cambio: `calendario.rs` ya decía en su cabecera «el abogado
+no va a abrir esto», porque enseña la cobertura del calendario de festivos y sus averías,
+no los plazos de nadie.
+
+**Los Ajustes se quedan con el abogado** aunque sean puesta a punto. El permiso de la
+cuenta caduca —cada siete días mientras la app de Google siga en *Testing*— y quien tiene
+que volver a darlo es él, en su navegador y con su cuenta; dejarlos solo en la aplicación
+de control le habría quitado la forma de reconectar su propio correo. Y una cuenta
+revocada **no da ningún error**: deja de entrar correo, sin más. Por eso el aviso aparece
+arriba, en cualquier sección, con un botón que lleva a reconectarla: lo que se ha roto se
+enseña donde se está trabajando.
+
+**`windows_subsystem` en las compilaciones de entrega.** Sin él, Windows trata el binario
+como programa de consola y abre una ventana negra al lado de la aplicación —no se ve con
+`cargo run`, sí con doble clic—. En depuración se conserva la consola a propósito: es
+donde sale un pánico.
+
+**Y esto tampoco es seguridad.** Las bases y la configuración están en la misma máquina,
+así que quien quiera mirar, mira. Lo que se gana es que no se distribuye código de
+diagnóstico con la herramienta de trabajo, y que ninguna de las dos aplicaciones tiene
+pantallas que estorben a lo suyo.
+
+**Un workspace, tres crates.** Lo común —`local_config`, `backend`, `estilo` y los tres
+módulos de acceso a datos— vive en **`nucleo`** y se comparte, no se copia. La frontera
+es `Message`: lo que no lo menciona se puede compartir, y las pantallas no, porque cada
+aplicación tiene sus mensajes. Dos copias de `local_config.rs` acabarían escribiendo con
+reglas distintas el archivo que guarda el refresh token del correo y las claves de las
+bases, que es exactamente el fichero que menos conviene tener por duplicado.
 
 **Conectar cuenta ya no bloquea la ventana.** Era el último bloqueo síncrono dentro de
 `update`, y el peor: espera a que una persona elija cuenta en el navegador, hasta cinco
@@ -1153,7 +1180,7 @@ tipo determina ruta, plazos y canal de salida.
 | base SQLCipher | `expedientes/db.py` |
 | interfaz al resto del sistema | `expedientes/agent.py` |
 | CLI | `expedientes/__main__.py` |
-| pantalla (iced) | `Frontend/src/screens/expedientes.rs` + `src/expedientes.rs` |
+| pantalla (iced) | `Frontend/src/screens/expedientes.rs` + `nucleo/src/expedientes.rs` |
 | vista de un expediente: la barra de nodos | `Frontend/src/screens/detalle.rs` |
 
 Superficie: `tipos · abrir · listar · hitos · fechar · cerrar · eliminar · vaciar`.
@@ -1222,7 +1249,7 @@ Decisiones que conviene no perder:
   pantalla lo advierte en rojo. Una barra que parece definitiva sin serlo es peor que
   no tenerla.
 - **Un tipo sin plantilla no inventa nodos.** Dice que su recorrido no está escrito.
-- **`Frontend/src/backend.rs`.** Localizar la carpeta del Backend y elegir intérprete
+- **`nucleo/src/backend.rs`.** Localizar la carpeta del Backend y elegir intérprete
   estaba dentro de `secretario.rs` porque `sec.mail` era lo único que se invocaba. Con
   dos módulos ya no es de ninguno: mismo movimiento que `sec/cuentas` en el Backend.
 
@@ -1483,7 +1510,7 @@ de fallar: es lo que hara falta en una app distribuida.
 
 **Ventanas de consola.** Una app de ventana que lanza un ejecutable de consola hace
 parpadear una ventana negra en Windows. `sec.mail` (Python) e `icacls` se lanzan
-ahora con `CREATE_NO_WINDOW` desde `Frontend/src/proceso.rs`, que en el resto de
+ahora con `CREATE_NO_WINDOW` desde `nucleo/src/proceso.rs`, que en el resto de
 plataformas no hace nada.
 
 **El Backend si es instalable en Windows.** Comprobado: `sqlcipher3` 0.6.2 publica

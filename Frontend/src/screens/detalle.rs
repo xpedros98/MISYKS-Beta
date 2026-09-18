@@ -23,8 +23,8 @@ use iced::widget::{button, column, row, scrollable, text, Space};
 use iced::{Element, Length};
 
 use crate::app::Message;
-use crate::estilo;
-use crate::expedientes::{Expediente, Hito};
+use nucleo::estilo;
+use nucleo::expedientes::{Expediente, Hito};
 
 // Ancho de cada nodo. Fijo para que los nombres no bailen y la barra se lea
 // como una secuencia y no como una lista de cajas de tamanos distintos.

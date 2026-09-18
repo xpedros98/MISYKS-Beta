@@ -11,10 +11,44 @@
 // en la barra de navegacion, donde cada seccion tiene el suyo; dentro de una
 // pantalla, el unico acento es lo que pide accion.
 use iced::widget::{button, container, text, Container, Text};
+use iced::theme::Palette;
 use iced::{Background, Border, Color, Font, Theme};
 
 const fn rgb(r: u8, g: u8, b: u8) -> Color {
     Color::from_rgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
+}
+
+/// El tema de cada aplicacion: **fondo claro la del abogado, negro la de
+/// administrador**.
+///
+/// Es la senal mas barata y mas dificil de ignorar de en cual estas. Las dos se
+/// parecen -- misma barra, mismas tarjetas, misma tipografia -- y van a estar
+/// abiertas a la vez en la misma pantalla; confundirlas es tocar el
+/// mantenimiento creyendo que trabajas, o al reves.
+///
+/// Funciona porque en este proyecto **el texto no lleva color fijo**: sale del
+/// tema, y lo atenuado baja la opacidad en vez de elegir un gris. Un gris fijo
+/// habria quedado invisible sobre negro, que es justo el motivo por el que esa
+/// regla esta escrita arriba.
+pub fn tema_usuario() -> Theme {
+    Theme::Light
+}
+
+pub fn tema_administrador() -> Theme {
+    // Negro de verdad, no un gris oscuro: tiene que distinguirse de un tema
+    // oscuro cualquiera del sistema. El acento es el de Ajustes, que es la
+    // seccion de la que nacio esta aplicacion.
+    Theme::custom(
+        "Administrador".to_string(),
+        Palette {
+            background: rgb(12, 12, 14),
+            text: rgb(228, 228, 232),
+            primary: SECCION_CALENDARIO,
+            success: rgb(60, 150, 90),
+            warning: rgb(200, 150, 40),
+            danger: ALERTA,
+        },
+    )
 }
 
 /// Color de cada seccion. Es lo unico que identifica por color en toda la app.

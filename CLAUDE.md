@@ -1,8 +1,8 @@
 # MISYKS-Beta
 
 Sistema de componentes para un despacho de abogados: recibe documentos, controla
-plazos, investiga, redacta y revisa. Backend en Python, frontend nativo en Rust con
-`iced`. Nueve grupos, 56 componentes diseñados, dos implementados (`sec.mail`, `sec.agenda`).
+plazos, investiga, redacta y revisa. Backend en Python y **dos** frontends nativos en
+Rust con `iced` —el del abogado y el de control—, que comparten el crate `nucleo`. Nueve grupos, 56 componentes diseñados, dos implementados (`sec.mail`, `sec.agenda`).
 
 **Dos clases de componente, y no se mezclan.** Un **agente IA** invoca un modelo de
 lenguaje; un **módulo** es código determinista, sin LLM. «Componente» los engloba;
@@ -94,7 +94,18 @@ python -m pro.calendario festivos ÁMBITO [AÑO]   # Días inhábiles de un siti
 python -m pro.calendario calendario ÁMBITO [AÑO] # El año en rejilla, para mirarlo a ojo
 ```
 
-Frontend (desde `Frontend/`): `cargo run`, `cargo build`, `cargo clippy`.
+Frontend: **dos aplicaciones** en un workspace de Cargo, desde la raíz del repo.
+
+```bash
+cargo run -p misyks-beta-frontend      # La del abogado: expedientes, correo, cuenta
+cargo run -p misyks-beta-admin         # La de control: cobertura del calendario
+cargo check --workspace                # Comprueba las dos y lo compartido
+cargo clippy --workspace
+```
+
+Lo común —acceso a bases, invocación del Backend, configuración local, estilos— vive en
+el crate **`nucleo`** y no se copia: dos copias de `local_config.rs` acabarían escribiendo
+con reglas distintas el archivo que guarda el refresh token y las claves de las bases.
 
 No hay suite de tests ni linter configurados todavía; no inventes órdenes de test.
 

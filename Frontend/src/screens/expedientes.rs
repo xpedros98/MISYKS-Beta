@@ -13,8 +13,8 @@ use iced::widget::{button, column, pick_list, row, scrollable, text, Space};
 use iced::{Element, Length};
 
 use crate::app::Message;
-use crate::estilo;
-use crate::expedientes::{self, Expediente, ExpedientesError, Hito, TipoDoc};
+use nucleo::estilo;
+use nucleo::expedientes::{self, Expediente, ExpedientesError, Hito, TipoDoc};
 
 pub struct ExpedientesState {
     pub tipos: Result<Vec<TipoDoc>, ExpedientesError>,

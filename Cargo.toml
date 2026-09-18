@@ -1,0 +1,18 @@
+# Workspace de MISYKS: dos aplicaciones y lo que comparten.
+#
+# `Frontend` es la del abogado y `Frontend_Admin` la de control. Se compilan por
+# separado a proposito -- el binario que se le entrega al despacho no lleva
+# dentro las pantallas de mantenimiento --, pero no se copian: lo comun vive en
+# `nucleo`, y ahi esta el acceso a las bases, la invocacion del Backend y la
+# configuracion local, que es justo lo que no puede tener dos versiones.
+#
+# El `target/` es unico para los tres, asi que compilar una no rehace las
+# dependencias de la otra.
+[workspace]
+resolver = "2"
+members = ["nucleo", "Frontend", "Frontend_Admin"]
+
+[workspace.dependencies]
+iced = "0.14"
+rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
+getrandom = "0.3"
