@@ -66,7 +66,7 @@ class Correo(ABC):
 
         `eml` es el mensaje original completo en MIME, que es lo que guarda la
         base y lo que lee `parser.py`: el mismo formato en los tres mundos.
-        Descargar no marca como leído -- el letrado sigue viendo su bandeja
+        Descargar no marca como leído -- el abogado sigue viendo su bandeja
         intacta desde sus propios dispositivos.
         """
 

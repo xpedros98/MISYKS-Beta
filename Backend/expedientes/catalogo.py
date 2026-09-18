@@ -18,7 +18,7 @@ Cada tipo trae:
 - `arquetipo`  A–J, qué le exige el documento al pipeline (§4). Es lo que
                determina la ruta, no la rama del derecho: un arrendamiento y un
                desahucio son los dos «Civil» y no comparten nada operativo.
-- `origen`     quién dispara: `letrado` (59), `secretario` (22), `workflow` (6),
+- `origen`     quién dispara: `abogado` (59), `secretario` (22), `workflow` (6),
                `agenda` (2).
 - `destino`    por dónde sale: `lexnet` (59), `admin` (12), `cliente` (8),
                `notarial` (6), `burofax` (2), `smac` (1), `policial` (1).

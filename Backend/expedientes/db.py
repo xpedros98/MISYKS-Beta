@@ -5,7 +5,7 @@ el del contrario y el asunto. Es lo contrario del calendario de festivos, que va
 en SQLite a secas porque es dato público del BOE.
 
 La referencia (`EXP-2026-001`) la pone la base y no quien llama: es lo que el
-letrado va a usar para nombrar el asunto en voz alta, y tiene que ser correlativa
+abogado va a usar para nombrar el asunto en voz alta, y tiene que ser correlativa
 por año sin huecos raros. Se calcula dentro de la misma transacción que la
 inserción, o dos expedientes abiertos a la vez se llevarían el mismo número.
 """

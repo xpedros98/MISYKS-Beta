@@ -6,7 +6,7 @@ oficial «se da por resuelto: mantenerlo no es tarea de este módulo». Va
 aparte del motor por tres razones que no son de estilo:
 
 - **Corren en sitios distintos.** El motor toca expedientes y vive en el PC del
-  letrado; el recolector solo lee boletines públicos y puede vivir en `maat`.
+  abogado; el recolector solo lee boletines públicos y puede vivir en `maat`.
 - **Corren en momentos distintos.** El motor, cada vez que llega una
   notificación; el recolector, de tanto en tanto y en segundo plano.
 - **Y sobre todo fallan distinto.** Si un boletín rediseña su web, el

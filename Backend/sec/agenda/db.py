@@ -5,7 +5,7 @@ correo: son dos módulos y cada uno responde de lo suyo. Comparten el archivo de
 credenciales porque la cuenta es una sola; no tienen por qué compartir datos.
 
 **Una sola tabla de eventos, con `tipo` y `origen`.** Un juicio que llega del
-calendario del letrado, una reunión escrita a mano y un plazo que entrega
+calendario del abogado, una reunión escrita a mano y un plazo que entrega
 `procesal` acaban todos en la misma agenda y se miran juntos o no sirven de
 nada. Lo que cambia entre ellos -- si se pueden mover, quién los produjo, si
 son firmes -- son columnas, no tablas.
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS eventos (
     repeticion   TEXT,                     -- RRULE con la que se creó, si nació aquí
     tipo         TEXT NOT NULL,            -- sin_clasificar | reunion | vista | plazo | obligacion
     origen       TEXT NOT NULL,            -- calendario | procesal | manual
-    letrado      TEXT,                     -- de quién es la agenda; se cruzan entre sí
+    abogado      TEXT,                     -- de quién es la agenda; se cruzan entre sí
     titulo       TEXT,
     lugar        TEXT,
     descripcion  TEXT,
@@ -75,11 +75,11 @@ CREATE TABLE IF NOT EXISTS acciones (
 """
 
 # `sin_clasificar` es el tipo con el que entra todo lo que viene del calendario
-# del letrado: la API no dice si un evento es un juicio o un café, y suponerlo
+# del abogado: la API no dice si un evento es un juicio o un café, y suponerlo
 # es exactamente lo que no debe hacer un módulo. Lo fija después `clasificar`.
 TIPOS = ("sin_clasificar", "reunion", "vista", "plazo", "obligacion")
 
-# Los que ocupan una hora del letrado y por tanto pueden chocar entre sí. Un
+# Los que ocupan una hora del abogado y por tanto pueden chocar entre sí. Un
 # plazo es una fecha dura sin hora: no colisiona con nadie, vence.
 #
 # `sin_clasificar` cuenta como ocupado a propósito, y es la misma prudencia que
@@ -131,6 +131,14 @@ class BaseDatos:
         # cuando esto corre, así que las filas son tuplas. En `table_info`, el
         # nombre de la columna es el campo 1.
         columnas = {f[1] for f in self.conn.execute("PRAGMA table_info(eventos)")}
+        # `letrado` pasó a llamarse `abogado`: son la misma persona y el sistema
+        # habla de una sola. «Letrado» se reserva para el **Letrado de la
+        # Administración de Justicia**, que es otro papel —firma decretos y
+        # notifica por LexNET— y aparece en las resoluciones que hay que leer.
+        # Se renombra la columna en vez de crear otra: los datos son los mismos.
+        if "letrado" in columnas and "abogado" not in columnas:
+            self.conn.execute("ALTER TABLE eventos RENAME COLUMN letrado TO abogado")
+            columnas.add("abogado")
         for nombre, tipo in (("repeticion", "TEXT"),):
             if nombre not in columnas:
                 self.conn.execute(f"ALTER TABLE eventos ADD COLUMN {nombre} {tipo}")
@@ -177,7 +185,7 @@ class BaseDatos:
         que permite que `sec.notificador` avise solo de lo que ha cambiado en
         vez de repetir la agenda entera cada vez que alguien sincroniza.
 
-        El `tipo` y el `letrado` de una fila ya existente **no se pisan**: los
+        El `tipo` y el `abogado` de una fila ya existente **no se pisan**: los
         pone quien clasifica (hoy, una persona), y una sincronización posterior
         no tiene por qué saber que aquel evento del calendario era una vista.
         """
@@ -185,7 +193,7 @@ class BaseDatos:
             clave: evento.get(clave)
             for clave in (
                 "proveedor", "cuenta", "evento_id", "serie_id", "repeticion", "tipo",
-                "origen", "letrado",
+                "origen", "abogado",
                 "titulo", "lugar", "descripcion", "inicio_local", "fin_local", "zona",
                 "inicio_utc", "fin_utc", "todo_el_dia", "cancelado", "organizador",
                 "asistentes", "expediente", "estado", "franja",
@@ -212,8 +220,8 @@ class BaseDatos:
         cambios = {
             clave: valor
             for clave, valor in campos.items()
-            # `tipo` y `letrado` se respetan si ya estaban clasificados a mano.
-            if clave not in ("tipo", "letrado") and valor != anterior[clave]
+            # `tipo` y `abogado` se respetan si ya estaban clasificados a mano.
+            if clave not in ("tipo", "abogado") and valor != anterior[clave]
         }
         if not cambios:
             return "igual", anterior["id"]
@@ -235,10 +243,10 @@ class BaseDatos:
     def evento(self, fila_id):
         return self.conn.execute("SELECT * FROM eventos WHERE id = ?", (fila_id,)).fetchone()
 
-    def clasificar(self, fila_id, tipo=None, letrado=None, expediente=None):
+    def clasificar(self, fila_id, tipo=None, abogado=None, expediente=None):
         """Dice qué es un evento que llegó del calendario sin decirlo.
 
-        Del calendario del letrado no viene el tipo: un evento llamado «Juicio
+        Del calendario del abogado no viene el tipo: un evento llamado «Juicio
         Pérez» es una vista y otro llamado «Café con Marta» no, y nada en la
         API lo distingue. Hasta que `sec.clasificador` mire el título, esto lo
         pone una persona, y por eso una sincronización posterior no lo pisa.
@@ -248,8 +256,8 @@ class BaseDatos:
             if tipo not in TIPOS:
                 raise ValueError(f"Tipo de evento desconocido: {tipo}. Los que hay: {', '.join(TIPOS)}.")
             cambios["tipo"] = tipo
-        if letrado is not None:
-            cambios["letrado"] = letrado
+        if abogado is not None:
+            cambios["abogado"] = abogado
         if expediente is not None:
             cambios["expediente"] = expediente
         if not cambios:
@@ -290,7 +298,7 @@ class BaseDatos:
     # --- plazos que entrega procesal --------------------------------------
 
     def anotar_plazo(self, plazo_id, fecha_limite, asunto, expediente=None, organo=None,
-                     estado="firme", franja=None, letrado=None):
+                     estado="firme", franja=None, abogado=None):
         """Anota o actualiza un plazo calculado por `procesal`.
 
         **La agenda no computa: recibe.** Aquí no se suma ni un día; lo que
@@ -312,7 +320,7 @@ class BaseDatos:
                 "evento_id": f"plazo:{plazo_id}",
                 "tipo": "plazo",
                 "origen": "procesal",
-                "letrado": letrado,
+                "abogado": abogado,
                 "titulo": asunto,
                 "lugar": organo,
                 "inicio_local": fecha_limite,
@@ -338,13 +346,13 @@ class BaseDatos:
 
     # --- consultas --------------------------------------------------------
 
-    def agenda(self, desde, hasta, letrado=None, incluir_cancelados=False):
+    def agenda(self, desde, hasta, abogado=None, incluir_cancelados=False):
         """Lo que hay entre dos fechas, en orden. Todo junto: es el punto."""
         condiciones = ["substr(inicio_local, 1, 10) BETWEEN ? AND ?"]
         valores = [desde, hasta]
-        if letrado:
-            condiciones.append("letrado = ?")
-            valores.append(letrado)
+        if abogado:
+            condiciones.append("abogado = ?")
+            valores.append(abogado)
         if not incluir_cancelados:
             condiciones.append("cancelado = 0")
         return self.conn.execute(
@@ -363,21 +371,21 @@ class BaseDatos:
         Solo chocan los que ocupan una hora -- reuniones y vistas --. Un plazo
         es una fecha dura sin hora: no colisiona, vence.
 
-        Se devuelven también los pares de **letrados distintos**, marcados como
+        Se devuelven también los pares de **abogados distintos**, marcados como
         'despacho'. No son un error pero hay que verlos: dos señalamientos a la
         misma hora en un despacho de dos personas son dos desplazamientos, y es
         lo que COMPONENTES.md exige al decir que fallar es «no cruzar agendas
-        entre letrados del despacho».
+        entre abogados del despacho».
         """
         tipos = ", ".join(f"'{t}'" for t in TIPOS_CON_HORA)
         return self.conn.execute(
             f"""
             SELECT a.id AS a_id, a.titulo AS a_titulo, a.inicio_local AS a_inicio,
-                   a.fin_local AS a_fin, a.letrado AS a_letrado, a.tipo AS a_tipo,
+                   a.fin_local AS a_fin, a.abogado AS a_abogado, a.tipo AS a_tipo,
                    b.id AS b_id, b.titulo AS b_titulo, b.inicio_local AS b_inicio,
-                   b.fin_local AS b_fin, b.letrado AS b_letrado, b.tipo AS b_tipo,
-                   CASE WHEN IFNULL(a.letrado, '') = IFNULL(b.letrado, '')
-                        THEN 'mismo_letrado' ELSE 'despacho' END AS ambito
+                   b.fin_local AS b_fin, b.abogado AS b_abogado, b.tipo AS b_tipo,
+                   CASE WHEN IFNULL(a.abogado, '') = IFNULL(b.abogado, '')
+                        THEN 'mismo_abogado' ELSE 'despacho' END AS ambito
               FROM eventos a
               JOIN eventos b ON b.id > a.id
              WHERE a.cancelado = 0 AND b.cancelado = 0

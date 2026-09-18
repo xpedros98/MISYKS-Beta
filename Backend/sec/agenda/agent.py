@@ -32,7 +32,7 @@ class SecAgenda:
             self._calendario = calendario_api.abrir()
         return self._calendario
 
-    # --- entrada: el calendario del letrado -------------------------------
+    # --- entrada: el calendario del abogado -------------------------------
 
     def sincronizar(self, desde=None, hasta=None):
         """Trae los eventos del calendario de la cuenta y los guarda.
@@ -78,9 +78,9 @@ class SecAgenda:
                 # «Juicio Pérez» es una vista y «Café con Marta» no, y la API
                 # no distingue. Entra sin clasificar y lo fija `clasificar`.
                 tipo="sin_clasificar",
-                # La cuenta es, hoy, el letrado: una máquina, una agenda. Con
-                # varios letrados esto saldrá de la ficha de cada uno.
-                letrado=calendario.cuenta,
+                # La cuenta es, hoy, el abogado: una máquina, una agenda. Con
+                # varios abogados esto saldrá de la ficha de cada uno.
+                abogado=calendario.cuenta,
             )
             que_paso, _ = self.db.guardar_evento(evento)
             if que_paso == "nuevo":
@@ -116,13 +116,13 @@ class SecAgenda:
         return self.db.anotar_plazo(plazo_id, fecha_limite, asunto, **datos)
 
     def apuntar(self, titulo, inicio, fin=None, tipo="reunion", todo_el_dia=False,
-                lugar=None, descripcion=None, zona=None, repeticion=None, letrado=None,
+                lugar=None, descripcion=None, zona=None, repeticion=None, abogado=None,
                 expediente=None):
         """Crea un compromiso propio, que no vino del calendario ni de procesal.
 
         Una reunión que alguien acuerda por teléfono, un cumpleaños, una
         obligación viva de un contrato ya cerrado (el arquetipo G). Se guarda
-        **solo aquí**: para que aparezca en el calendario del letrado hay que
+        **solo aquí**: para que aparezca en el calendario del abogado hay que
         `publicar`, y eso es otra decisión y otro momento.
 
         `repeticion` es una RRULE (`RRULE:FREQ=YEARLY`) y solo viaja al
@@ -144,7 +144,7 @@ class SecAgenda:
                 "evento_id": identidad,
                 "tipo": tipo,
                 "origen": "manual",
-                "letrado": letrado,
+                "abogado": abogado,
                 "titulo": titulo,
                 "lugar": lugar,
                 "descripcion": descripcion,
@@ -159,24 +159,24 @@ class SecAgenda:
         self.db.registrar(fila_id, "apuntado", titulo)
         return fila_id
 
-    def clasificar(self, evento_id, tipo=None, letrado=None, expediente=None):
+    def clasificar(self, evento_id, tipo=None, abogado=None, expediente=None):
         """Dice qué es un evento del calendario: reunión, vista, obligación."""
         if self.db.evento(evento_id) is None:
             raise LookupError(f"No hay ningún evento con id {evento_id} en la agenda.")
-        self.db.clasificar(evento_id, tipo=tipo, letrado=letrado, expediente=expediente)
-        self.db.registrar(evento_id, "clasificado", tipo or letrado or expediente)
+        self.db.clasificar(evento_id, tipo=tipo, abogado=abogado, expediente=expediente)
+        self.db.registrar(evento_id, "clasificado", tipo or abogado or expediente)
 
     # --- salida ------------------------------------------------------------
 
-    def agenda(self, desde=None, hasta=None, letrado=None, incluir_cancelados=False):
+    def agenda(self, desde=None, hasta=None, abogado=None, incluir_cancelados=False):
         """Lo que hay entre dos fechas: reuniones, vistas, plazos y obligaciones."""
         desde, hasta = self._ventana(desde, hasta)
-        return self.db.agenda(desde, hasta, letrado=letrado, incluir_cancelados=incluir_cancelados)
+        return self.db.agenda(desde, hasta, abogado=abogado, incluir_cancelados=incluir_cancelados)
 
     def colisiones(self, desde=None, hasta=None):
         """Compromisos que se pisan. Es la mitad del valor de tener agenda.
 
-        Dos señalamientos del mismo letrado a la misma hora son la causa de
+        Dos señalamientos del mismo abogado a la misma hora son la causa de
         suspensión más frecuente, y se ven con semanas de antelación si alguien
         mira. Mirar es esto.
         """
@@ -184,7 +184,7 @@ class SecAgenda:
         return self.db.colisiones(desde, hasta)
 
     def publicar(self, evento_id):
-        """Escribe en el calendario del letrado un evento que nació aquí.
+        """Escribe en el calendario del abogado un evento que nació aquí.
 
         Solo a petición explícita, nunca durante una sincronización: escribir
         en el calendario de alguien es una acción hacia fuera, y una agenda que
@@ -196,7 +196,7 @@ class SecAgenda:
             raise LookupError(f"No hay ningún evento con id {evento_id} en la agenda.")
         if fila["origen"] == "calendario":
             raise ValueError(
-                f"El evento {evento_id} ya vino del calendario del letrado: publicarlo lo duplicaría."
+                f"El evento {evento_id} ya vino del calendario del abogado: publicarlo lo duplicaría."
             )
         identificador = self.calendario.crear_evento(dict(fila))
         self.db.registrar(evento_id, "publicado", f"{self.calendario.proveedor}:{identificador}")

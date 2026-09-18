@@ -7,7 +7,7 @@ calendario a la vez (ARQUITECTURA.md §8.6).
 sec.agenda corre hoy en local, junto a `sec.mail`, porque usa sus mismos
 tokens y porque la agenda del despacho no es dato público. §8.6 deja abierto si
 debería correr en `maat`: un componente que vigila plazos tiene que poder avisar
-con el equipo del letrado apagado, pero eso pondría los refresh tokens de todos
+con el equipo del abogado apagado, pero eso pondría los refresh tokens de todos
 los clientes en el servidor. Mientras no se decida, aquí.
 """
 from ..cuentas.ajustes import DATA_DIR

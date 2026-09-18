@@ -35,7 +35,7 @@ from . import calendario
 
 API = "https://www.googleapis.com/calendar/v3"
 
-# El calendario principal de la cuenta. Que el letrado lleve el despacho en un
+# El calendario principal de la cuenta. Que el abogado lleve el despacho en un
 # calendario secundario es posible, y entonces esto tendrá que salir de la
 # configuración; hoy no hay nada que lo pida.
 CALENDARIO = "primary"
@@ -167,7 +167,7 @@ def _cuerpo(evento):
     """El diccionario propio traducido a lo que espera la API.
 
     Solo se mandan las claves presentes: `actualizar` hace PATCH y lo que no
-    viaja se queda como estaba en el calendario del letrado.
+    viaja se queda como estaba en el calendario del abogado.
     """
     cuerpo = {}
     if "titulo" in evento:
@@ -200,7 +200,7 @@ def _cuerpo(evento):
 def _sin_desplazamiento(rfc3339):
     """`2026-09-17T10:00:00+02:00` → `2026-09-17T10:00:00`, la hora que se lee.
 
-    Es la que escribió quien creó el evento y la que el letrado reconoce en su
+    Es la que escribió quien creó el evento y la que el abogado reconoce en su
     propio calendario. No sirve para comparar dos eventos de zonas distintas:
     para eso está `_a_utc`.
     """

@@ -6,7 +6,7 @@
 //
 // La barra de nodos es lo unico que hay aqui, y se lee de izquierda a derecha:
 // cada nodo es un hito del caso -- emplazamiento, contestacion, vista -- y
-// debajo va su fecha. Los nodos son del **caso**, no del sistema: el letrado
+// debajo va su fecha. Los nodos son del **caso**, no del sistema: el abogado
 // reconoce «audiencia previa», no `cri.coherencia`.
 //
 // Tres cosas que la barra tiene que distinguir o no sirve:

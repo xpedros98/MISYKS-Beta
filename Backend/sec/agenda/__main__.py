@@ -5,7 +5,7 @@
     python -m sec.agenda colisiones [--desde F] [--hasta F]    lo que se pisa
     python -m sec.agenda apuntar TITULO FECHA [--fin F] [--tipo T] [--dia-completo]
                                 [--repetir-cada-anio] [--lugar L]
-    python -m sec.agenda clasificar ID --tipo T [--letrado L] [--expediente E]
+    python -m sec.agenda clasificar ID --tipo T [--abogado L] [--expediente E]
     python -m sec.agenda plazo ID FECHA ASUNTO [--expediente E] [--organo O]
                                 [--estado firme|provisional] [--franja F]
     python -m sec.agenda publicar ID                           lo escribe en el calendario
@@ -40,7 +40,7 @@ def main():
 
     con_ventana("sincronizar", "trae los eventos del calendario de la cuenta")
     s = con_ventana("agenda", "muestra lo que hay entre dos fechas")
-    s.add_argument("--letrado", default=None)
+    s.add_argument("--abogado", default=None)
     s.add_argument("--cancelados", action="store_true", help="incluye lo anulado")
     con_ventana("colisiones", "compromisos que se pisan")
 
@@ -53,12 +53,12 @@ def main():
     s.add_argument("--repetir-cada-anio", dest="anual", action="store_true",
                    help="lo convierte en anual al publicarlo (RRULE:FREQ=YEARLY)")
     s.add_argument("--lugar", default=None)
-    s.add_argument("--letrado", default=None)
+    s.add_argument("--abogado", default=None)
 
     s = sub.add_parser("clasificar", help="dice qué es un evento traído del calendario")
     s.add_argument("id", type=int)
     s.add_argument("--tipo", choices=TIPOS, default=None)
-    s.add_argument("--letrado", default=None)
+    s.add_argument("--abogado", default=None)
     s.add_argument("--expediente", default=None)
 
     s = sub.add_parser("plazo", help="anota un plazo YA CALCULADO por procesal")
@@ -69,9 +69,9 @@ def main():
     s.add_argument("--organo", default=None)
     s.add_argument("--estado", choices=("firme", "provisional"), default="firme")
     s.add_argument("--franja", choices=("holgado", "ajustado", "critico", "vencido"), default=None)
-    s.add_argument("--letrado", default=None)
+    s.add_argument("--abogado", default=None)
 
-    s = sub.add_parser("publicar", help="escribe en el calendario del letrado un evento nacido aquí")
+    s = sub.add_parser("publicar", help="escribe en el calendario del abogado un evento nacido aquí")
     s.add_argument("id", type=int)
 
     s = sub.add_parser("acciones", help="registro de lo hecho sobre cada evento")
@@ -99,7 +99,7 @@ def ejecutar(args):
                 f"{r['cancelados']} cancelados{fuera} (recorrido {recorrido})."
             )
         elif args.orden == "agenda":
-            filas = agente.agenda(args.desde, args.hasta, args.letrado, args.cancelados)
+            filas = agente.agenda(args.desde, args.hasta, args.abogado, args.cancelados)
             if not filas:
                 print("No hay nada anotado en esa ventana.")
             for f in filas:
@@ -109,11 +109,11 @@ def ejecutar(args):
             if not choques:
                 print("Sin colisiones en esa ventana.")
             for c in choques:
-                marca = "MISMO LETRADO" if c["ambito"] == "mismo_letrado" else "despacho"
+                marca = "MISMO ABOGADO" if c["ambito"] == "mismo_abogado" else "despacho"
                 print(
-                    f"[{marca}] {c['a_inicio'][:16]}  {c['a_titulo']}  ({c['a_tipo']}, {c['a_letrado']})\n"
+                    f"[{marca}] {c['a_inicio'][:16]}  {c['a_titulo']}  ({c['a_tipo']}, {c['a_abogado']})\n"
                     f"{'':<16}  choca con {c['b_inicio'][:16]}  {c['b_titulo']}  "
-                    f"({c['b_tipo']}, {c['b_letrado']})"
+                    f"({c['b_tipo']}, {c['b_abogado']})"
                 )
         elif args.orden == "apuntar":
             fila_id = agente.apuntar(
@@ -124,11 +124,11 @@ def ejecutar(args):
                 todo_el_dia=args.dia_completo or len(args.inicio) <= 10,
                 lugar=args.lugar,
                 repeticion="RRULE:FREQ=YEARLY" if args.anual else None,
-                letrado=args.letrado,
+                abogado=args.abogado,
             )
             print(f"Apuntado con id {fila_id}. Para que salga en el calendario: publicar {fila_id}.")
         elif args.orden == "clasificar":
-            agente.clasificar(args.id, args.tipo, args.letrado, args.expediente)
+            agente.clasificar(args.id, args.tipo, args.abogado, args.expediente)
             print(f"Evento {args.id} clasificado.")
         elif args.orden == "plazo":
             que_paso, anterior = agente.anotar_plazo(
@@ -139,7 +139,7 @@ def ejecutar(args):
                 organo=args.organo,
                 estado=args.estado,
                 franja=args.franja,
-                letrado=args.letrado,
+                abogado=args.abogado,
             )
             if que_paso == "adelantado":
                 print(f"AVISO: el plazo {args.plazo_id} se ADELANTA de {anterior} a {args.fecha}.")

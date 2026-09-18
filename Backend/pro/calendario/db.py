@@ -2,7 +2,7 @@
 
 Sin SQLCipher y sin clave, a diferencia de `sec_mail.db`: los festivos son dato
 público del BOE. Vive igualmente en `~/.misyks` porque el motor que la consume
-toca expedientes y corre en el PC del letrado, y sin réplica local un corte de
+toca expedientes y corre en el PC del abogado, y sin réplica local un corte de
 red dejaría al despacho sin calcular ni un plazo.
 
 Tres ideas sostienen el esquema (razonadas en ARQUITECTURA.md §8.3):

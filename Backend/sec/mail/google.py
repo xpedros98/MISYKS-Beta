@@ -122,7 +122,7 @@ class Gmail(correo.Correo):
         """En Gmail mover es poner una etiqueta y quitar la anterior.
 
         Sin quitar la de origen el correo quedaría en las dos, que es
-        exactamente lo que el letrado no espera de un «mover». El `id` no
+        exactamente lo que el abogado no espera de un «mover». El `id` no
         cambia, así que se devuelve el mismo.
         """
         cambio = {"addLabelIds": [self._id_etiqueta(destino)]}

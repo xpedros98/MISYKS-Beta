@@ -1,6 +1,6 @@
 // Pantalla de calendario: que se sabe, que falta y que dias son inhabiles.
 //
-// Es la vista de **mantenimiento**, no la del dia a dia. El letrado no va a
+// Es la vista de **mantenimiento**, no la del dia a dia. El abogado no va a
 // abrir esto: lo que el mirara son los plazos, y para eso hace falta el motor de
 // dias, que todavia no existe. Lo que esta pantalla evita es el fallo que
 // describe COMPONENTES.md -- que el calendario envejezca en silencio -- poniendo

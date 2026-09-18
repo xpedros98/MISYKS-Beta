@@ -3,7 +3,7 @@
 Cómo se añade un sitio nuevo al calendario de `pro.calendario`, y por qué el
 proceso es como es. Está escrito para una persona del equipo.
 
-El sistema calcula plazos procesales y **el letrado no verifica las fechas que
+El sistema calcula plazos procesales y **el abogado no verifica las fechas que
 salen**: recibe el aviso y actúa. Eso quiere decir que nadie va a detectar un
 error aquí abajo. Por eso el proceso pide una cosa incómoda —copiar literalmente
 el trozo del boletín del que sale cada fecha— y por eso el programa rechaza

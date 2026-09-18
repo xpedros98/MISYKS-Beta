@@ -17,7 +17,7 @@ uno aquí:
   excepción es perder un señalamiento.
 - **Zonas horarias.** Un evento es una hora local con una zona asociada, no un
   instante. Se guardan **las dos cosas**: la hora local tal como la escribió
-  quien creó el evento (es la que el letrado reconoce) y el instante UTC que
+  quien creó el evento (es la que el abogado reconoce) y el instante UTC que
   sale del desplazamiento que trae el propio proveedor (es con el que se
   comparan solapes). El desplazamiento viene dentro del RFC 3339, así que no
   hace falta base de datos de zonas horarias -- que en Windows exigiría el

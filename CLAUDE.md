@@ -25,6 +25,14 @@ hable del módulo de Python, dilo como *paquete*.
 
 El proyecto se desarrolla en un contexto de España, pero los tecnicismos pueden tratarse en inglés por conveniencia.
 
+**«Abogado», y «letrado» nunca a secas.** El usuario del sistema es el **abogado**.
+«Letrado» se reserva para el **Letrado de la Administración de Justicia** (**LAJ**), que
+es otro papel —el antiguo secretario judicial: firma decretos y diligencias de
+ordenación y notifica por LexNET— y aparece constantemente en las resoluciones que el
+sistema tiene que leer. El de la otra parte es el **abogado contrario**. Sin esta
+separación, la palabra «Letrado» de un documento se confunde con el usuario, y eso
+acabaría en los prompts de `arc.partes` y `sec.clasificador`.
+
 ## Comandos
 
 Backend (desde `Backend/`, con el venv en `Backend/.venv`). El venv no está en el
@@ -65,7 +73,7 @@ python -m sec.agenda colisiones                  # Compromisos que se pisan
 python -m sec.agenda apuntar TITULO FECHA        # Un compromiso propio (reunión, obligación)
 python -m sec.agenda clasificar ID --tipo TIPO   # Dice si aquel evento era una vista o un café
 python -m sec.agenda plazo ID FECHA ASUNTO       # Anota un plazo YA calculado (lo hará procesal)
-python -m sec.agenda publicar ID                 # Escribe en el calendario del letrado, a petición
+python -m sec.agenda publicar ID                 # Escribe en el calendario del abogado, a petición
 python -m sec.agenda acciones [N]                # Qué se ha hecho sobre cada evento
 ```
 
