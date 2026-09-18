@@ -121,6 +121,12 @@ COMPONENTES.md los lista: solo incluye si es agente IA o módulo, dónde corre, 
 sirve cada uno y sus restricciones. Esas restricciones son invariantes, no estilo: al
 romperlas, el código sigue compilando y aparentemente funcionando.
 
+## Limpieza del servidor
+
+LIMPIEZA.md propone qué quitar de `maat` y qué conservar, con el inventario en el que
+se apoya. Es **propuesta, no parte de trabajo**: nada de lo que hay ahí se ha ejecutado.
+El criterio no es si algo funciona, sino a qué componente de los que faltan le sirve.
+
 ## Historial
 
 Existe una especie de diario que simplifica las acciones por días: DIARIO.md; sigue una estructura fija de: día, resumen, cambios.
