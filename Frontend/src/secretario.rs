@@ -7,8 +7,8 @@
 // salen nunca de este ordenador.
 use rusqlite::Connection;
 
+use crate::backend;
 use crate::local_config::LocalConfig;
-use crate::proceso::sin_consola;
 
 #[derive(Debug, Clone)]
 // id y carpeta no se muestran todavia en la lista (screens/secretario.rs),
@@ -51,81 +51,6 @@ impl std::fmt::Display for SecMailError {
             ),
         }
     }
-}
-
-/// Localiza la carpeta `Backend/` en tiempo de ejecucion.
-///
-/// Antes se resolvia con `env!("CARGO_MANIFEST_DIR")`, una ruta de *tiempo de
-/// compilacion*: funciona con `cargo run` desde el checkout y deja de existir
-/// en la maquina de cualquier otro en cuanto la app se distribuya como
-/// binario. No era un problema de plataforma -- se rompia igual en macOS --
-/// pero se arregla aqui. Orden de busqueda:
-///
-/// 1. `MISYKS_BACKEND`, para apuntar a mano (pruebas, instalaciones raras).
-/// 2. `Backend/` junto al ejecutable: la app empaquetada.
-/// 3. La carpeta hermana de `Frontend/` en el checkout: desarrollo.
-///
-/// Cada candidata se valida comprobando que contiene de verdad el modulo, no
-/// solo que exista un directorio con ese nombre.
-fn backend_dir() -> Result<std::path::PathBuf, SecMailError> {
-    let mut probadas = Vec::new();
-
-    if let Some(ruta) = std::env::var_os("MISYKS_BACKEND") {
-        let candidata = std::path::PathBuf::from(ruta);
-        if es_backend(&candidata) {
-            return Ok(candidata);
-        }
-        probadas.push(candidata);
-    }
-
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let candidata = dir.join("Backend");
-            if es_backend(&candidata) {
-                return Ok(candidata);
-            }
-            probadas.push(candidata);
-        }
-    }
-
-    if let Some(padre) = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent() {
-        let candidata = padre.join("Backend");
-        if es_backend(&candidata) {
-            return Ok(candidata);
-        }
-        probadas.push(candidata);
-    }
-
-    Err(SecMailError::BackendNoEncontrado(
-        probadas
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join(", "),
-    ))
-}
-
-fn es_backend(dir: &std::path::Path) -> bool {
-    dir.join("sec").join("mail").join("__main__.py").is_file()
-}
-
-/// Interprete de Python con el que lanzar `sec.mail`.
-///
-/// Prefiere el venv del propio Backend -- `Scripts\python.exe` en Windows,
-/// `bin/python3` en el resto; con la ruta POSIX fija, el boton Refrescar no
-/// arrancaba nada en Windows. Si no hay venv (app empaquetada, o alguien que
-/// instalo las dependencias en el Python del sistema) cae al del PATH en vez
-/// de fallar: `sec.mail` avisara por su cuenta si le falta `sqlcipher3`.
-fn ruta_interprete(backend: &std::path::Path) -> std::path::PathBuf {
-    let venv = if cfg!(windows) {
-        backend.join(".venv").join("Scripts").join("python.exe")
-    } else {
-        backend.join(".venv").join("bin").join("python3")
-    };
-    if venv.is_file() {
-        return venv;
-    }
-    std::path::PathBuf::from(if cfg!(windows) { "python" } else { "python3" })
 }
 
 /// Invoca `python -m sec.mail sincronizar` en local, en tandas de `limite`
@@ -187,20 +112,16 @@ pub fn estado_oauth() -> Result<Vec<(String, String, String)>, SecMailError> {
 /// salida. Los errores de Python llegan por stderr con su mensaje ya
 /// redactado para una persona; se propagan tal cual en vez de reescribirlos.
 fn orden_secmail(args: &[&str]) -> Result<String, SecMailError> {
-    let backend = backend_dir()?;
-    let python = ruta_interprete(&backend);
-    let mut orden = std::process::Command::new(&python);
-    orden.arg("-m").arg("sec.mail").args(args).current_dir(&backend);
-    sin_consola(&mut orden);
-    let salida = orden.output().map_err(|e| {
-        SecMailError::Sincronizacion(format!("no se pudo lanzar {}: {e}", python.display()))
-    })?;
-
-    if !salida.status.success() {
-        let stderr = String::from_utf8_lossy(&salida.stderr);
-        return Err(SecMailError::Sincronizacion(stderr.trim().to_string()));
-    }
-    Ok(String::from_utf8_lossy(&salida.stdout).trim().to_string())
+    // Localizar el Backend y elegir interprete es comun a todos los modulos y
+    // vive en `backend.rs`; lo propio de aqui es traducir el fallo al
+    // vocabulario de esta pantalla.
+    backend::ejecutar("sec.mail", args).map_err(|e| {
+        if e.starts_with("No se encontro la carpeta Backend/") {
+            SecMailError::BackendNoEncontrado(e)
+        } else {
+            SecMailError::Sincronizacion(e)
+        }
+    })
 }
 
 pub fn list_emails(limit: i64) -> Result<Vec<EmailSummary>, SecMailError> {

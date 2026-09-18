@@ -21,6 +21,7 @@ const fn rgb(r: u8, g: u8, b: u8) -> Color {
 pub const SECCION_INICIO: Color = rgb(58, 110, 165);
 pub const SECCION_SECRETARIO: Color = rgb(20, 130, 130);
 pub const SECCION_CALENDARIO: Color = rgb(126, 74, 160);
+pub const SECCION_EXPEDIENTES: Color = rgb(176, 108, 44);
 pub const SECCION_AJUSTES: Color = rgb(120, 120, 130);
 
 /// Lo unico que pide accion dentro de una pantalla.
@@ -61,6 +62,28 @@ pub fn tenue<'a>(contenido: impl Into<String>) -> Text<'a> {
     text(contenido.into()).size(11).style(|theme: &Theme| text::Style {
         color: Some(tenue_color(theme)),
     })
+}
+
+/// Boton que no parece un boton: una fila de lista que se puede pulsar.
+///
+/// Sin fondo ni borde en reposo, con un realce apenas perceptible al pasar por
+/// encima. Un boton con relieve por cada fila convertiria la lista en una
+/// botonera y el ojo no sabria donde mirar.
+pub fn fila_clicable() -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |theme: &Theme, status: button::Status| {
+        let resaltada = matches!(
+            status,
+            button::Status::Hovered | button::Status::Pressed
+        );
+        let mut fondo = theme.palette().text;
+        fondo.a = if resaltada { 0.06 } else { 0.0 };
+        button::Style {
+            background: Some(Background::Color(fondo)),
+            text_color: theme.palette().text,
+            border: Border::default().rounded(4),
+            ..button::Style::default()
+        }
+    }
 }
 
 /// Caja con un borde discreto, para separar bloques sin dibujar lineas.

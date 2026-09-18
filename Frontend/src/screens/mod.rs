@@ -1,4 +1,6 @@
 pub mod calendario;
+pub mod detalle;
+pub mod expedientes;
 pub mod home;
 pub mod secretario;
 pub mod settings;
@@ -8,6 +10,7 @@ pub enum Screen {
     #[default]
     Home,
     Secretario,
+    Expedientes,
     Calendario,
     Ajustes,
 }
@@ -19,6 +22,7 @@ impl Screen {
         match self {
             Screen::Home => crate::estilo::SECCION_INICIO,
             Screen::Secretario => crate::estilo::SECCION_SECRETARIO,
+            Screen::Expedientes => crate::estilo::SECCION_EXPEDIENTES,
             Screen::Calendario => crate::estilo::SECCION_CALENDARIO,
             Screen::Ajustes => crate::estilo::SECCION_AJUSTES,
         }
@@ -28,6 +32,7 @@ impl Screen {
         match self {
             Screen::Home => "Inicio",
             Screen::Secretario => "Secretario",
+            Screen::Expedientes => "Expedientes",
             Screen::Calendario => "Calendario",
             Screen::Ajustes => "Ajustes",
         }

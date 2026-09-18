@@ -2,7 +2,9 @@ use iced::widget::{button, column, row};
 use iced::Length;
 use iced::Element;
 
+use crate::expedientes::TipoDoc;
 use crate::screens::calendario::CalendarioState;
+use crate::screens::expedientes::ExpedientesState;
 use crate::screens::settings::SettingsState;
 use crate::screens::{self, Screen};
 use crate::secretario::{self, EmailSummary, SecMailError};
@@ -17,6 +19,7 @@ const LIMITE_LISTA: i64 = -1;
 pub struct State {
     current_screen: Screen,
     calendario: CalendarioState,
+    expedientes: ExpedientesState,
     secretario_emails: Result<Vec<EmailSummary>, SecMailError>,
     secretario_sync: Option<Result<String, SecMailError>>,
     settings: SettingsState,
@@ -32,6 +35,7 @@ impl Default for State {
             secretario_emails: secretario::list_emails(LIMITE_LISTA),
             secretario_sync: None,
             calendario: CalendarioState::cargar(),
+            expedientes: ExpedientesState::cargar(),
             settings: SettingsState::cargar(),
         }
     }
@@ -45,6 +49,16 @@ pub enum Message {
     RefrescarSecretario,
     CalendarioAmbito(String),
     CalendarioComputo(usize),
+    ExpedienteTipo(TipoDoc),
+    ExpedienteAbrir(i64),
+    ExpedienteCerrarDetalle,
+    ExpedienteCrear,
+    ExpedienteEliminar(i64),
+    // El borrado masivo va en tres mensajes a proposito: pedir, confirmar,
+    // cancelar. Un solo mensaje seria una sola pulsacion, y esto no se deshace.
+    ExpedienteVaciarPedir,
+    ExpedienteVaciarConfirmar,
+    ExpedienteVaciarCancelar,
 }
 
 pub fn update(state: &mut State, message: Message) {
@@ -65,6 +79,14 @@ pub fn update(state: &mut State, message: Message) {
         Message::RefrescarSecretario => sincronizar_y_recargar(state),
         Message::CalendarioAmbito(ambito) => state.calendario.seleccionar(ambito),
         Message::CalendarioComputo(computo) => state.calendario.cambiar_computo(computo),
+        Message::ExpedienteTipo(tipo) => state.expedientes.elegir_tipo(tipo),
+        Message::ExpedienteAbrir(id) => state.expedientes.abrir_detalle(id),
+        Message::ExpedienteCerrarDetalle => state.expedientes.cerrar_detalle(),
+        Message::ExpedienteCrear => state.expedientes.crear(),
+        Message::ExpedienteEliminar(id) => state.expedientes.eliminar(id),
+        Message::ExpedienteVaciarPedir => state.expedientes.pedir_vaciado(),
+        Message::ExpedienteVaciarConfirmar => state.expedientes.vaciar(),
+        Message::ExpedienteVaciarCancelar => state.expedientes.cancelar_vaciado(),
     }
 }
 
@@ -78,6 +100,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
         row![
             nav_button(Screen::Home, state.current_screen),
             nav_button(Screen::Secretario, state.current_screen),
+            nav_button(Screen::Expedientes, state.current_screen),
             nav_button(Screen::Calendario, state.current_screen),
             nav_button(Screen::Ajustes, state.current_screen),
         ]
@@ -90,6 +113,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
         Screen::Secretario => {
             screens::secretario::view(&state.secretario_emails, &state.secretario_sync)
         }
+        Screen::Expedientes => screens::expedientes::view(&state.expedientes),
         Screen::Calendario => screens::calendario::view(&state.calendario),
         Screen::Ajustes => screens::settings::view(&state.settings),
     };

@@ -1,0 +1,29 @@
+tipo,orden,hito,clase,norma,revisado
+contestacion_demanda,1,Emplazamiento recibido,acto,art. 404 LEC,no
+contestacion_demanda,2,Contestación presentada,limite,art. 404 LEC — 20 días hábiles,no
+contestacion_demanda,3,Audiencia previa,senalamiento,art. 414 LEC,no
+contestacion_demanda,4,Juicio,senalamiento,art. 431 LEC,no
+contestacion_demanda,5,Sentencia,resolucion,art. 434 LEC,no
+contestacion_demanda,6,Firmeza,resolucion,art. 207 LEC,no
+recurso_apelacion,1,Sentencia notificada,acto,art. 458 LEC,no
+recurso_apelacion,2,Recurso interpuesto,limite,art. 458 LEC — 20 días hábiles,no
+recurso_apelacion,3,Oposición de las demás partes,limite,art. 461 LEC — 10 días,no
+recurso_apelacion,4,Remisión a la Audiencia,acto,art. 463 LEC,no
+recurso_apelacion,5,Vista o deliberación,senalamiento,art. 464 LEC,no
+recurso_apelacion,6,Sentencia de apelación,resolucion,art. 465 LEC,no
+recurso_contencioso,1,Resolución notificada,acto,art. 46 LJCA,no
+recurso_contencioso,2,Vía administrativa agotada,acto,art. 25 LJCA,no
+recurso_contencioso,3,Recurso interpuesto,limite,art. 46 LJCA — 2 meses,no
+recurso_contencioso,4,Expediente administrativo reclamado,acto,art. 48 LJCA,no
+recurso_contencioso,5,Demanda formalizada,limite,art. 52 LJCA — 20 días,no
+recurso_contencioso,6,Contestación de la Administración,limite,art. 54 LJCA — 20 días,no
+recurso_contencioso,7,Sentencia,resolucion,art. 67 LJCA,no
+monitorio,1,Petición inicial presentada,acto,art. 812 LEC,no
+monitorio,2,Requerimiento de pago al deudor,acto,art. 815 LEC,no
+monitorio,3,Plazo del deudor para pagar u oponerse,limite,art. 815 LEC — 20 días,no
+monitorio,4,Oposición del deudor,acto,art. 818 LEC,no
+monitorio,5,Decreto de terminación o traslado a juicio,resolucion,arts. 816 y 818 LEC,no
+burofax_requerimiento,1,Burofax enviado,acto,—,no
+burofax_requerimiento,2,Acuse con certificación de contenido,acto,—,no
+burofax_requerimiento,3,Plazo concedido al requerido,limite,el que fije el propio requerimiento,no
+burofax_requerimiento,4,Vencimiento sin respuesta,limite,—,no
