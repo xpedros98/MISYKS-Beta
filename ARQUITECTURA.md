@@ -451,7 +451,7 @@ ocurre **antes** del pleito, **durante** y **después**.
 `1` siempre · `c` condicional · `0` no interviene
 
 **Disparadores:** abogado 59 · secretario 22 · workflow 6 · agenda 2
-**Destinos:** lexnet 59 · admin 12 · cliente 8 · notarial 6 · burofax 2 · smac 1 · policial 1
+**Destinos:** lexnet 59 · admin 12 · cliente 8 · notarial 6 · burofax 2 · smac 1 · presencial 1
 
 Tres lecturas:
 
@@ -507,7 +507,7 @@ cuaderno_particional,F,abogado,1,1,1,0,1,1,1,1,1,notarial
 aceptacion_renuncia_herencia,G,abogado,1,1,1,0,c,c,1,1,1,notarial
 impugnacion_testamento,A,abogado,1,1,1,1,1,0,1,1,1,lexnet
 reclamacion_legitima,B,abogado,1,1,1,c,1,1,1,1,1,lexnet
-denuncia_penal,D,abogado,1,1,1,0,1,0,1,1,1,policial
+denuncia_penal,D,abogado,1,1,1,0,1,0,1,1,1,presencial
 querella,D,abogado,1,1,1,c,1,0,1,1,1,lexnet
 escrito_defensa,A,secretario,1,1,1,1,1,0,1,1,1,lexnet
 escrito_acusacion,A,workflow,1,1,1,1,1,0,1,1,1,lexnet
@@ -694,7 +694,12 @@ pru.inventario · pru.autenticidad     indicios y cadena de custodia
 inv.normativa        tipo penal + DESGLOSE DE SUS ELEMENTOS
 red.hechos           relato fáctico; la denuncia no vincula calificación
 cri.riesgo           no afirmar más de lo que los indicios sostienen
-pro.forma · pro.destino → pro.registro → pro.acuse          juzgado o comisaría — no siempre LexNET
+pro.forma · pro.destino → pro.acuse          presencial: sin módulo de canal
+                     comisaría, juzgado de guardia o Fiscalía. No lo transmite el
+                     sistema: lo presenta el abogado y vuelve una copia sellada sin
+                     número de registro, así que el cierre es cumplido DECLARADO.
+                     Si se presenta en el juzgado por vía electrónica, el canal es
+                     `lexnet`: son los dos candidatos del mismo tipo
 ```
 
 **`querella`**

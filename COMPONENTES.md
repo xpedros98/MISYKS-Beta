@@ -710,20 +710,117 @@ Segundo paso del grupo, justo antes de que el secretario envíe. Existe porque
   revisa los requisitos de **presentación**. Un escrito impecable puede ser
   rechazado por un defecto de forma que el crítico no mira.
 
-**`pro.destino`** — a dónde va
-- **Contrato:** `{tipo_documento, organo, expediente}` → `{canal, destinatario, municipio_sede}`
+**`pro.destino`** — a dónde va · módulo, en local · **diseñado, sin código**
+Responde a tres preguntas: **por qué canal sale esto, a quién, y en qué municipio está
+la sede del órgano.** La tercera es la que lo mete en la puerta: `pro.calendario` no
+puede aplicar festivos locales sin ella, y quien conoce el órgano es este módulo. Es
+además el punto de traspaso limpio entre los dos grupos: **procesal decide dónde,
+secretario entrega**.
+
+**Se le llama en dos momentos y es la misma llamada.** En la puerta, antes de calcular
+el plazo, donde solo se consume `municipio_sede`; y en la salida, antes de entregar,
+donde se consumen el canal y el destinatario. Que sea una sola resolución es
+deliberado: dos resoluciones del mismo órgano en momentos distintos pueden divergir, y
+entonces el plazo se calculó con un municipio y el escrito sale hacia otro.
+
+- **Contrato:** `{tipo_documento, organo?, expediente, momento}` → `{canal_preferente, canales_candidatos[], destinatario, municipio_sede, firmeza, avisos[]}`
+  - `organo` entra como **identificador** si se conoce, o como el texto tal cual consta
+    para que el módulo intente resolverlo.
+  - `municipio_sede`: código INE de cinco dígitos como texto, o vacío. Vale igual para
+    un juzgado y para una Administración, porque el cómputo administrativo también
+    necesita la sede de su destinatario.
+  - `firmeza`: `firme · provisional`, el mismo vocabulario que `pro.calendario`,
+    `pro.caducidad` y `pro.prescripcion`. Provisional cuando el órgano no se ha
+    resuelto o cuando el canal depende de una decisión no tomada.
 - **Reglas:**
-  - Resuelve el canal que usará el secretario: `lexnet-out · registro · burofax ·
-    notaria · entrega`.
-  - **Resuelve también el municipio de la sede del órgano**, a partir de una tabla de
-    órganos y sedes. `pro.calendario` lo necesita para aplicar los festivos locales, y
-    este es el módulo que ya conoce el órgano; sin esta resolución el calendario
-    tendría que adivinarlo o caería en el municipio del despacho. Esta consulta se usa
-    **ya en la puerta**, no solo en la salida: el primer cálculo del plazo la necesita.
-  - Es el punto de traspaso limpio entre los dos grupos: **procesal decide dónde,
-    secretario entrega**.
-  - 30 de los 89 tipos no salen por LexNET. Sin este módulo, el destino se
-    asumiría y un tercio del catálogo saldría por el canal equivocado.
+  - **El órgano se resuelve por identificador, nunca por el nombre.** El nombre solo
+    sirve para encontrar la fila, y las formas en que ese órgano aparece de verdad en
+    una notificación se guardan como **alias**, que son dato con su fuente, no
+    heurística. Normalizar —mayúsculas, tildes, abreviaturas— sirve para buscar el
+    alias, no para inventarlo. Es el criterio de `inv.normativa`, que rechaza «CC» y
+    exige `BOE-A-1889-4763`.
+  - **Nunca resuelve por parecido.** «Juzgado de Primera Instancia nº 4 de San
+    Sebastián de los Reyes» y «…de Donostia-San Sebastián» se parecen mucho y están en
+    provincias, comunidades y calendarios distintos. Un acierto por similitud no da un
+    error visible: da una fecha límite calculada con el calendario de otra comunidad.
+    Sin alias, la respuesta es `organo_no_reconocido`.
+  - **La clave para el calendario es el municipio, no el partido judicial.** Las
+    fiestas locales son municipales y un partido judicial agrupa municipios con fiestas
+    distintas, así que usarlo como clave —como hacía el ecosistema antiguo, y además
+    como texto libre— mete los festivos de la cabecera en todos los demás.
+  - **Cada órgano lleva vigencia.** Se reorganizan: la reforma que convierte los
+    juzgados en Tribunales de Instancia cambia los nombres y no las sedes. Con
+    vigencia, una resolución de 2024 sigue resolviendo; sin ella deja de resolver el
+    día que se actualiza la tabla. Mismo criterio que las reglas de `pro.calendario`.
+  - **Distingue dos fallos que no se arreglan igual.** `organo_no_reconocido` —no
+    sabemos qué juzgado es, así que no hay municipio— se arregla añadiendo el órgano o
+    el alias a la tabla; `municipio_sin_cobertura` —sabemos que es Getafe, pero el
+    calendario no tiene sus fiestas locales— se arregla añadiendo el municipio al árbol
+    de ámbitos y recolectando sus festivos. Confundirlos deja a quien lo lee sin saber
+    qué hay que hacer.
+  - **Cuando no resuelve: fecha prudente y `provisional`**, con el aviso en texto para
+    el abogado. **Nunca el municipio del despacho ni solo los festivos nacionales**, que
+    es lo que hacía el ecosistema antiguo: el número salía, parecía firme y nadie se
+    enteraba nunca de que se había calculado con el calendario de otra ciudad.
+  - **Los dos avisos son enumerables**, como la cobertura `pendiente` del calendario:
+    una lista de órganos por resolver y otra de municipios sin cobertura. Es el
+    mecanismo por el que los diez municipios de prueba crecen hacia los que el despacho
+    usa de verdad, empujados por casos reales, en vez de cargar por delante 8.131
+    municipios y todos los juzgados de España.
+  - **El canal se devuelve con candidatos y un preferente, y nunca se asume por
+    descarte.** El `destino` del catálogo es el preferente, no el único: la
+    `denuncia_penal` puede presentarse en comisaría (`presencial`) o en el juzgado de
+    guardia, donde el abogado sí podría presentarla por vía electrónica (`lexnet`). No
+    son dos tipos documentales, es un tipo con dos salidas, y cuál se usa lo decide
+    quien lleva el caso; la elección se registra. **30 de los 89 tipos no salen por
+    LexNET**: tratarlo como destino único deja un tercio del catálogo saliendo por el
+    canal equivocado.
+  - **Un justificante presencial es declarado, no acreditado**, y eso viaja a
+    `pro.acuse` para que la auditoría distinga lo que consta de lo que se ha dicho.
+  - **No llama a ningún modelo.**
+- **Falla si:** resuelve un municipio por parecido de nombre; cae al municipio del
+  despacho o a los festivos nacionales cuando no resuelve; confunde órgano no
+  reconocido con municipio sin cobertura, y entonces nadie sabe qué hay que arreglar;
+  devuelve `firme` con el órgano sin resolver; cierra el canal a un único valor en un
+  tipo que admite dos; deja pasar un justificante presencial como acreditado; o asume
+  LexNET por descarte.
+- **Necesita:** la **tabla de órganos y sedes** (nota siguiente), que es dato nuevo; el
+  catálogo de los 89 tipos, que ya existe, para el canal preferente; el árbol de
+  ámbitos de `pro.calendario`, para comprobar que el municipio existe antes de
+  devolverlo; y del expediente, el órgano tal como consta y los datos del destinatario.
+
+*La tabla de órganos y sedes.* Dato revisable, no código, con una fila por órgano:
+identificador, nombre oficial, **alias[]**, tipo y número, orden jurisdiccional,
+**municipio de la sede** en código INE, partido judicial y vigencia desde/hasta. La
+mantiene el equipo. Primera versión: los órganos de los **diez municipios ya sembrados**
+en `pro.calendario`, más los que vayan apareciendo en expedientes reales. Queda por
+comprobar si el identificador puede ser el **código de órgano que ya viaja en las
+notificaciones** —el de LexNET y el NIG—: si consta siempre y es estable, es mejor que
+inventar uno, por lo mismo que `inv.normativa` usa el del BOE.
+
+*Los siete canales, y quién sirve cada uno.* El vocabulario es el del catálogo, que ya
+es dato en uso, no uno propio de esta ficha.
+
+| canal | tipos | lo sirve | qué vuelve |
+|---|---|---|---|
+| `lexnet` | 59 | `pro.lexnet` | justificante con hora oficial |
+| `admin` | 12 | `pro.registro` | nº de registro y **dos fechas** |
+| `cliente` | 8 | `sec.entrega` | nada que registrar |
+| `notarial` | 6 | `pro.notaria` | cita y copia autorizada |
+| `burofax` | 2 | `pro.burofax` | acuse **con certificación de contenido** |
+| `smac` | 1 | `pro.registro` | papeleta sellada; además **suspende** el plazo de la demanda |
+| `presencial` | 1 | **nadie** | copia sellada, **sin nº de registro** |
+
+**`presencial` no tiene módulo, y eso es la respuesta, no un hueco.** Un módulo de canal
+se define por tener credenciales y transmitir, y aquí el sistema no transmite nada: la
+cadena termina en `pro.forma`, el documento se le entrega al abogado y `pro.acuse` lo
+cierra como cumplido **declarado**. El canal sigue haciendo falta para lo único
+importante, que es impedir que ese tipo salga por LexNET por descarte. Se llama
+`presencial` y no `policial` porque nombra la propiedad —no hay registro que devuelva
+identificador y fecha oficial— en vez de la institución, y así cubre los tres sitios
+donde la misma denuncia puede acabar: comisaría, juzgado de guardia y Fiscalía. Con el
+nombre viejo, además, el único tipo `policial` del catálogo incumplía una regla de
+`pro.registro`, que falla si acepta un justificante sin número de registro.
 
 ### Salida — canales procesales
 *Bloque pendiente de confirmación: llega desde `secretario` al acotarse éste al
@@ -743,7 +840,8 @@ correo y la agenda.*
 - **Falla si:** acusa automáticamente sin registrarlo — el plazo corre y nadie lo
   sabe; da por presentado sin justificante.
 
-**`pro.registro`** — registro administrativo · 12 tipos
+**`pro.registro`** — registro administrativo · 13 tipos: los 12 de canal `admin` y la
+papeleta del SMAC, que se registra igual aunque su efecto sea suspender un plazo
 El más complejo del bloque: no es un sistema, son decenas.
 
 - **Contrato:** `{documento, administración, procedimiento}` → `{justificante, nº_registro, fecha_presentacion, fecha_entrada_competente, fecha_silencio_estimada, sentido_silencio}`

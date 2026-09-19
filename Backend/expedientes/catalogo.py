@@ -21,7 +21,9 @@ Cada tipo trae:
 - `origen`     quién dispara: `abogado` (59), `secretario` (22), `workflow` (6),
                `agenda` (2).
 - `destino`    por dónde sale: `lexnet` (59), `admin` (12), `cliente` (8),
-               `notarial` (6), `burofax` (2), `smac` (1), `policial` (1).
+               `notarial` (6), `burofax` (2), `smac` (1), `presencial` (1).
+               Es el canal **preferente**, no el único: `pro.destino` puede
+               devolver candidatos cuando el tipo admite dos salidas.
 """
 import csv
 from pathlib import Path

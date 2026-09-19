@@ -42,7 +42,7 @@ cuaderno_particional,F,abogado,notarial
 aceptacion_renuncia_herencia,G,abogado,notarial
 impugnacion_testamento,A,abogado,lexnet
 reclamacion_legitima,B,abogado,lexnet
-denuncia_penal,D,abogado,policial
+denuncia_penal,D,abogado,presencial
 querella,D,abogado,lexnet
 escrito_defensa,A,secretario,lexnet
 escrito_acusacion,A,workflow,lexnet
