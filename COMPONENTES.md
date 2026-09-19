@@ -3,7 +3,7 @@
 > Para qué sirve cada componente y qué no puede hacer. Nueve grupos, 56
 > componentes. Solo dos tienen código; el resto es diseño.
 > La arquitectura del sistema —cómo se componen los grupos, las rutas, los
-> arquetipos— está en `ARQUITECTURA.md`. Última actualización: 2026-09-17
+> arquetipos— está en `ARQUITECTURA.md`. Última actualización: 2026-09-19
 
 **Dos clases de componente, y no se confunden.** Un **agente IA** invoca un modelo
 de lenguaje: su salida hay que acotarla y comprobarla porque puede inventar. Un
@@ -553,22 +553,95 @@ el **tiempo de preparación** propuesto; y el artículo, con su identificador BO
 exigencia que los festivos: sin cita literal, la fila no entra. Primera versión: los 12
 tipos revisados con detalle y los 6 de mayor volumen (`ARQUITECTURA.md` §9 y §8.2).
 
-**`pro.prescripcion`** — plazos sustantivos
-Se comporta al revés que la caducidad, y por eso es un módulo aparte y no una
-opción de `pro.caducidad`.
+**`pro.prescripcion`** — plazos sustantivos · módulo, en local · **diseñado, sin código**
+Se comporta al revés que la caducidad, y por eso es un módulo aparte y no una opción de
+`pro.caducidad`. Responde a otra pregunta: **¿qué de lo que se reclama está todavía
+vivo?** No mira el caso, mira los conceptos.
 
-- **Contrato:** `{accion, partidas[], hechos_interruptivos[]}` → `{partidas_vivas[], partidas_prescritas[]}`
+**Nunca bloquea, ni en penal.** Es la diferencia de fondo con `pro.caducidad`, que sí
+puede cerrar una ruta: aquí **no hay campo `bloqueo`** en la salida, y quien lea los dos
+contratos seguidos no debe esperar simetría. El motivo es jurídico, no de diseño: la
+prescripción civil solo existe si el demandado la alega, así que reclamar una partida
+prescrita es una jugada legítima del letrado y no un error del sistema. Como el módulo no
+puede parar nada, todo su valor está en que el aviso llegue y se pueda discutir: de ahí
+que cada partida salga con su explicación y que el resultado quede registrado en
+`sec.notificador`. Lo que protege al despacho no es el bloqueo, es la constancia de que
+se avisó.
+
+**Dos clases de hecho, y no se comportan igual.** Interrumpir devuelve el plazo a cero y
+lo hace empezar completo (art. 1973 CC: reclamación judicial, reclamación extrajudicial,
+reconocimiento del deudor). Suspender para el reloj y lo reanuda donde estaba, sin perder
+lo corrido. Confundirlas regala o quita un plazo entero. Y hay actos que hacen las dos
+cosas a la vez sobre plazos distintos —la solicitud de conciliación suspende la caducidad
+e interrumpe la prescripción—, así que el mismo documento alimenta a los dos módulos con
+efectos opuestos. El ecosistema antiguo no distinguía ninguna de las dos: marcaba el
+plazo como suspendido sin mover la fecha de vencimiento.
+
+- **Contrato:** `{accion, partidas[], hechos[], ahora}` → `{partidas[], avisos[], version_tabla}`
+  - `hechos[]`: cada uno con `clase` (`interrumpe · suspende`), fecha, fecha de fin si
+    suspende, el acto del que sale y su prueba.
+  - Cada partida de salida: `{concepto, fecha_nacimiento, plazo_aplicado, fila_tabla, fecha_prescripcion, estado, firmeza, franja, hechos_aplicados[], explicacion}`
+  - `estado`: `viva · prescrita`. `firmeza`: `firme · provisional`. **Son dos ejes, no
+    uno**: una partida puede estar viva y ser provisional a la vez.
+  - `franja`: `holgado · ajustado · crítico · vencido`, **la misma escala que
+    `pro.caducidad`**, para que `sec.notificador` no tenga que aprender dos.
+  - `ahora` es obligatorio y la salida lleva la versión de la tabla usada: sin las dos
+    cosas, un resultado de hace tres meses no se puede volver a explicar.
 - **Reglas:**
-  - **Sí se interrumpe**: reclamación extrajudicial, reconocimiento de deuda,
-    interposición de demanda. Cada interrupción reinicia el cómputo entero.
-  - En varios tipos corre **por partida**: cada mensualidad reclamada prescribe por
-    separado.
-  - No filtra el caso, **filtra conceptos**: la salida es una lista partida en dos.
-  - El plazo depende de la acción ejercitada, que en la puerta puede no estar
-    decidida. Marca el resultado como **provisional** y exige reevaluación.
-- **Falla si:** lo tratan como puerta booleana; olvida un hecho interruptivo y
-  descarta conceptos vivos.
-- **Necesita:** historial de requerimientos, que produce `pro.burofax`.
+  - **Los hechos se aplican en orden cronológico.** Una interrupción posterior a una
+    suspensión borra lo acumulado; aplicarlos en el orden en que llegan, y no en el que
+    ocurrieron, da otra fecha.
+  - **Una suspensión sin fecha de fin deja la partida provisional.** Mientras el reloj
+    está parado no hay fecha de prescripción que dar, y darla firme es inventarla.
+  - **Corre por partida**, y qué es una partida lo fija el tipo: una mensualidad de
+    nómina, una factura, un concepto reclamado. En varios tipos son decenas.
+  - **No filtra el caso, filtra conceptos**: la salida es la lista entera, cada partida
+    con su estado, nunca un sí/no sobre el asunto.
+  - **Años y meses van de fecha a fecha** (art. 5.1 CC), nunca convertidos a días. Cinco
+    años no son 1825 días: el ecosistema antiguo lo hacía así y se quedaba un día corto,
+    dos en los plazos de diez años, porque ignoraba los bisiestos. Corto significa
+    declarar muerto lo que todavía vive.
+  - **Cada regla lleva su vigencia.** El plazo general de las acciones personales pasó de
+    quince años a cinco en 2015 y tiene régimen transitorio: un hecho anterior no se
+    computa con la regla de hoy, por lo mismo que un plazo de 2021 no conoce la
+    inhabilidad de Navidad.
+  - **Lo que no está en la tabla no se inventa**: aviso de **acción no reconocida**, y la
+    fila que falta se añade a la tabla.
+  - **El plazo depende de la acción ejercitada**, que en la puerta puede no estar
+    decidida —en penal sale de la pena en abstracto, que exige una calificación que aún
+    no se ha hecho—. Entonces el resultado es `provisional` y exige reevaluación.
+  - **Toda partida prescrita lleva su explicación**: qué fila, qué artículo y qué hechos
+    se aplicaron, en qué orden. Es lo único con lo que el letrado puede contradecir al
+    módulo, y como este no bloquea, contradecirlo es todo lo que hay.
+  - **No llama a ningún modelo.**
+- **Falla si:** devuelve un booleano, o bloquea; olvida un hecho y descarta conceptos
+  vivos; convierte años o meses en días; trata una suspensión como interrupción, o al
+  revés; aplica los hechos fuera de orden; da fecha firme con una suspensión abierta;
+  computa con la regla vigente hoy un hecho anterior a la reforma; o devuelve una partida
+  prescrita sin explicación con la que discutirla.
+- **Necesita:** la **tabla de plazos sustantivos** y el **catálogo de hechos** (nota
+  siguiente); el historial de requerimientos con su acuse y su certificación de
+  contenido, que produce `pro.burofax` —mientras no exista, los hechos se anotan a mano,
+  como hoy se anotan los plazos en `sec.agenda`—; y `pro.calendario` **solo** para los
+  plazos cortos en días: los de años y meses son naturales de fecha a fecha y no
+  consultan festivos, así que este módulo no espera al motor de días para existir.
+
+*La tabla de plazos sustantivos y el catálogo de hechos.* Dos datos revisables, no
+código, con la misma exigencia que los festivos: sin cita literal, la fila no entra. La
+tabla, una fila por acción: plazo, unidad, desde cuándo corre, si se aprecia de oficio,
+el artículo con su identificador BOE, su cita literal, su vigencia y el régimen
+transitorio si lo tiene. El catálogo, una fila por acto: si interrumpe o suspende, su
+artículo y qué prueba exige. Primera versión: **laboral y civil** —el año de las acciones
+derivadas del contrato de trabajo, donde la partida se ve con más claridad, y el plazo
+general de las acciones personales con su transitorio—. **Penal queda fuera de la primera
+versión**, porque su plazo depende de la pena en abstracto y eso exige una calificación
+que en la puerta no existe. Las citas de esta ficha **están sin comprobar contra el
+BOE**: son la pista por donde empezar, no la fuente.
+
+*Qué se publica en la agenda.* Una sola fecha por expediente, la de la primera partida en
+prescribir. Las demás viven en el módulo y se consultan ahí: un expediente de reclamación
+de cantidad con dieciocho mensualidades enterraría la agenda con dieciocho avisos del
+mismo asunto.
 
 **`pro.procedibilidad`** — requisitos previos
 El único módulo que puede **desviar el pipeline a otro tipo documental**.
@@ -700,15 +773,19 @@ El más complejo del bloque: no es un sistema, son decenas.
 
 - **Ninguno usa LLM: son módulos, no agentes.** Es el bloque auditable del sistema;
   si deja de serlo, se pierde la única parte verificable a mano.
-- **La tabla de plazos es el activo crítico.** `pro.caducidad` y `pro.prescripcion`
-  valen exactamente lo que valga esa tabla. Debe versionarse, tener autoría y fecha de
-  revisión, y ser un dato, no código. **La mantiene el equipo, no el letrado, y se
-  vigila:** cada cierto tiempo se consulta en el BOE el texto vigente de cada artículo
-  citado y se compara con la cita guardada; si ha cambiado, se avisa al equipo para
-  revisar la fila. Es una consulta y una comparación de textos, sin modelo, y no forma
-  parte de `pro.caducidad`. Sin ella la tabla envejece en silencio: la del ecosistema
-  antiguo seguía ofreciendo la «preparación» del recurso de apelación, un trámite
-  suprimido en 2011.
+- **Las tablas de plazos son el activo crítico, y son dos.** La procesal, de
+  `pro.caducidad`, y la sustantiva de `pro.prescripcion` con su catálogo de hechos. No
+  se mezclan, porque no responden a lo mismo: una dice hasta cuándo se puede actuar
+  dentro de un procedimiento, la otra hasta cuándo sigue vivo un derecho. Cada módulo
+  vale exactamente lo que valga su tabla. Las dos deben versionarse, tener autoría y
+  fecha de revisión, y ser un dato, no código. **Las mantiene el equipo, no el letrado, y
+  se vigilan:** cada cierto tiempo se consulta en el BOE el texto vigente de cada
+  artículo citado y se compara con la cita guardada; si ha cambiado, se avisa al equipo
+  para revisar la fila. Es una consulta y una comparación de textos, sin modelo, y no
+  forma parte de ninguno de los dos módulos. Sin esa vigilancia la tabla envejece en
+  silencio: la del ecosistema antiguo seguía ofreciendo la «preparación» del recurso de
+  apelación, un trámite suprimido en 2011, y computaba cinco años de prescripción como
+  1825 días naturales.
 - **Procesal decide, secretario ejecuta.** Separar criterio de canal es lo que permite
   que el que tiene credenciales no tome decisiones y el que decide no pueda enviar.
 
