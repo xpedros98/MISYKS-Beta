@@ -30,3 +30,15 @@ Desde la raíz del repo:
 ```bash
 claude
 ```
+
+## 3 · Abrir Archivo con Visual Code
+
+Para abrir fichero en visual code:
+
+```bash
+code archivo.extension 
+```
+
+
+
+
