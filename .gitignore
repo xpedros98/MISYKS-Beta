@@ -2,3 +2,9 @@
 __pycache__/
 *.db
 .config
+
+# El target del workspace, que ahora vive en la raiz y no dentro de Frontend/.
+# Con la division en dos aplicaciones hay un solo directorio de compilacion para
+# las tres crates, y sin esta linea entran casi ocho mil ficheros en el primer
+# `git add -A`.
+/target

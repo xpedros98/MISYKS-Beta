@@ -1,0 +1,8 @@
+[package]
+name = "misyks-beta-admin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iced = { workspace = true }
+nucleo = { path = "../nucleo" }

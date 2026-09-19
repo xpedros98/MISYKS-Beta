@@ -6,7 +6,7 @@
 //
 // La barra de nodos es lo unico que hay aqui, y se lee de izquierda a derecha:
 // cada nodo es un hito del caso -- emplazamiento, contestacion, vista -- y
-// debajo va su fecha. Los nodos son del **caso**, no del sistema: el letrado
+// debajo va su fecha. Los nodos son del **caso**, no del sistema: el abogado
 // reconoce «audiencia previa», no `cri.coherencia`.
 //
 // Tres cosas que la barra tiene que distinguir o no sirve:
@@ -23,8 +23,8 @@ use iced::widget::{button, column, row, scrollable, text, Space};
 use iced::{Element, Length};
 
 use crate::app::Message;
-use crate::estilo;
-use crate::expedientes::{Expediente, Hito};
+use nucleo::estilo;
+use nucleo::expedientes::{Expediente, Hito};
 
 // Ancho de cada nodo. Fijo para que los nombres no bailen y la barra se lea
 // como una secuencia y no como una lista de cajas de tamanos distintos.
@@ -84,9 +84,9 @@ pub fn view<'a>(expediente: &'a Expediente, hitos: &'a [Hito]) -> Element<'a, Me
         let mut barra = row![].spacing(0).align_y(iced::Alignment::Start);
         for (i, h) in hitos.iter().enumerate() {
             if i > 0 {
-                barra = barra.push(conector(hitos[i - 1].ocurrido));
+                barra = barra.push(conector(hitos[i - 1].ocurrido()));
             }
-            barra = barra.push(nodo(h));
+            barra = barra.push(nodo(expediente.id, h));
         }
 
         let sin_revisar = hitos.iter().any(|h| !h.revisado);
@@ -109,11 +109,21 @@ pub fn view<'a>(expediente: &'a Expediente, hitos: &'a [Hito]) -> Element<'a, Me
         .into()
 }
 
-/// Un nodo: la marca, el nombre, la fecha y de donde sale.
-fn nodo(h: &Hito) -> Element<'_, Message> {
-    // Relleno si ya ocurrio, hueco si no. Es la unica diferencia que hace falta
-    // para leer de un vistazo por donde va el caso.
-    let marca = if h.ocurrido { "●" } else { "○" };
+/// Un nodo: la marca, el nombre, la fecha, quien lo dio por hecho y el boton.
+///
+/// El boton esta **en el nodo** y no en una lista aparte porque marcar algo
+/// como hecho es decir «esto de aqui ya esta»: separarlo del nodo obligaria a
+/// leer dos sitios para saber de que se habla.
+fn nodo(expediente_id: i64, h: &Hito) -> Element<'_, Message> {
+    // Relleno si ya ocurrio, hueco si no, y una marca propia para lo que no
+    // sigue el camino normal. Es lo que se lee de un vistazo.
+    let marca = match h.estado.as_str() {
+        "ocurrido" => "●",
+        "en_pausa" => "◍",
+        "cancelado" => "⊘",
+        _ if h.vencido => "◉",
+        _ => "○",
+    };
 
     let fecha = h.fecha_legible();
     let fecha_widget: Element<Message> = if h.fecha.is_some() {
@@ -131,6 +141,32 @@ fn nodo(h: &Hito) -> Element<'_, Message> {
         estilo::tenue(matiz).into()
     };
 
+    // Quien lo dio por hecho, o por que no sigue el camino normal.
+    let nota = h.nota();
+    let nota_widget: Element<Message> = if nota.is_empty() {
+        Space::new().height(0).into()
+    } else if h.vencido {
+        text(nota).size(11).style(|_| text::Style { color: Some(estilo::ALERTA) }).into()
+    } else {
+        estilo::tenue(nota).into()
+    };
+
+    // El boton: marcar lo que aun no esta, deshacer lo que se marco sin querer.
+    // Solo tiene sentido en lo que puede pasar por hecho -- un hito cancelado o
+    // en pausa se resuelve desde donde se puso asi.
+    let accion: Element<Message> = match h.estado.as_str() {
+        "ocurrido" => button(text("Deshacer").size(10))
+            .padding([2, 6])
+            .style(estilo::fila_clicable())
+            .on_press(Message::HitoDeshacer(expediente_id, h.orden))
+            .into(),
+        "pendiente" => button(text("Hecho").size(10))
+            .padding([2, 6])
+            .on_press(Message::HitoHecho(expediente_id, h.orden))
+            .into(),
+        _ => Space::new().height(0).into(),
+    };
+
     column![
         text(marca).size(16),
         // El numero no es decoracion: es con el que se le pone fecha al hito
@@ -141,6 +177,8 @@ fn nodo(h: &Hito) -> Element<'_, Message> {
             .align_x(iced::alignment::Horizontal::Center),
         fecha_widget,
         matiz_widget,
+        nota_widget,
+        accion,
     ]
     // Todo centrado bajo su marca: es lo que hace que el texto se lea como
     // «lo que pasa en este nodo» y no como una columna de una tabla.
@@ -185,8 +223,8 @@ fn normas(hitos: &[Hito]) -> Element<'_, Message> {
 
 fn leyenda() -> Element<'static, Message> {
     estilo::tenue(
-        "● ocurrido   ○ pendiente   ·   «ultimo dia» = plazo propio   \
-         ·   «sin senalar» = lo fija el juzgado",
+        "● hecho   ○ pendiente   ◉ vencido   ◍ en pausa   ⊘ cancelado   \
+         ·   «ultimo dia» = plazo propio   ·   «sin senalar» = lo fija el juzgado",
     )
     .into()
 }

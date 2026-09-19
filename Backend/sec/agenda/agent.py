@@ -8,22 +8,48 @@ La regla que manda sobre todas las demás está en la primera línea de su ficha
 este archivo no hay ni una suma de días, y no es un descuido: duplicar el
 cálculo aquí garantiza que las dos versiones acaben divergiendo, y entonces hay
 dos fechas y ninguna forma de saber cuál vale.
+
+Y por lo mismo **tampoco los guarda**. Los plazos son hitos del expediente y
+viven en `expedientes.hitos`, que es su única verdad; aquí se **proyectan** para
+poder verlos junto a las vistas y las reuniones, que es de donde sale el valor
+de tener agenda. Guardar aquí una copia de la fecha era lo que hacíamos hasta
+que se vio que era el mismo error contra el que avisa todo lo demás: el mismo
+dato en dos sitios acaba divergiendo.
 """
 from datetime import date, datetime, timedelta, timezone
+
+from expedientes import Expedientes
+from expedientes import db as expedientes_db
 
 from . import calendario as calendario_api
 from . import config, db
 
 
 class SecAgenda:
-    def __init__(self, base=None, calendario=None):
+    def __init__(self, base=None, calendario=None, expedientes=None):
         self.db = base or db.abrir()
         # Se abre al primer uso: `agenda` y `colisiones` no necesitan red, y
         # exigir conexión para mirar lo ya guardado sería una avería nueva.
         self._calendario = calendario
+        # Igual con los expedientes, y además inyectable: si `agenda` abriera
+        # siempre la base real, no habría forma de probar la proyección contra
+        # datos propios.
+        self._expedientes = expedientes
+        self._expedientes_propios = expedientes is None
 
     def cerrar(self):
         self.db.cerrar()
+        # Solo se cierra lo que se abrió aquí: si los expedientes los trajo
+        # quien llama, son suyos y los cierra él.
+        if self._expedientes is not None and self._expedientes_propios:
+            self._expedientes.cerrar()
+
+    @property
+    def expedientes(self):
+        """El almacén de expedientes, de donde salen los plazos proyectados."""
+        if self._expedientes is None:
+            self._expedientes = Expedientes()
+        return self._expedientes
 
     @property
     def calendario(self):
@@ -32,7 +58,7 @@ class SecAgenda:
             self._calendario = calendario_api.abrir()
         return self._calendario
 
-    # --- entrada: el calendario del letrado -------------------------------
+    # --- entrada: el calendario del abogado -------------------------------
 
     def sincronizar(self, desde=None, hasta=None):
         """Trae los eventos del calendario de la cuenta y los guarda.
@@ -78,9 +104,9 @@ class SecAgenda:
                 # «Juicio Pérez» es una vista y «Café con Marta» no, y la API
                 # no distingue. Entra sin clasificar y lo fija `clasificar`.
                 tipo="sin_clasificar",
-                # La cuenta es, hoy, el letrado: una máquina, una agenda. Con
-                # varios letrados esto saldrá de la ficha de cada uno.
-                letrado=calendario.cuenta,
+                # La cuenta es, hoy, el abogado: una máquina, una agenda. Con
+                # varios abogados esto saldrá de la ficha de cada uno.
+                abogado=calendario.cuenta,
             )
             que_paso, _ = self.db.guardar_evento(evento)
             if que_paso == "nuevo":
@@ -101,28 +127,14 @@ class SecAgenda:
             self.db.guardar_cursor(calendario.proveedor, calendario.cuenta, cursor_nuevo, desde, hasta)
         return resumen
 
-    # --- entrada: los plazos que entrega procesal --------------------------
-
-    def anotar_plazo(self, plazo_id, fecha_limite, asunto, **datos):
-        """Recibe un plazo ya calculado por `procesal` y lo pone en la agenda.
-
-        Devuelve (`qué pasó`, `fecha anterior`): 'nuevo', 'adelantado',
-        'retrasado' o 'igual'. Quien llama necesita esa distinción porque un
-        plazo **adelantado** exige aviso inmediato -- enterarse tarde puede
-        costar el plazo -- y uno retrasado no interrumpe a nadie.
-
-        `fecha_limite` llega calculada. Aquí no se toca.
-        """
-        return self.db.anotar_plazo(plazo_id, fecha_limite, asunto, **datos)
-
     def apuntar(self, titulo, inicio, fin=None, tipo="reunion", todo_el_dia=False,
-                lugar=None, descripcion=None, zona=None, repeticion=None, letrado=None,
+                lugar=None, descripcion=None, zona=None, repeticion=None, abogado=None,
                 expediente=None):
         """Crea un compromiso propio, que no vino del calendario ni de procesal.
 
         Una reunión que alguien acuerda por teléfono, un cumpleaños, una
         obligación viva de un contrato ya cerrado (el arquetipo G). Se guarda
-        **solo aquí**: para que aparezca en el calendario del letrado hay que
+        **solo aquí**: para que aparezca en el calendario del abogado hay que
         `publicar`, y eso es otra decisión y otro momento.
 
         `repeticion` es una RRULE (`RRULE:FREQ=YEARLY`) y solo viaja al
@@ -144,7 +156,7 @@ class SecAgenda:
                 "evento_id": identidad,
                 "tipo": tipo,
                 "origen": "manual",
-                "letrado": letrado,
+                "abogado": abogado,
                 "titulo": titulo,
                 "lugar": lugar,
                 "descripcion": descripcion,
@@ -159,24 +171,81 @@ class SecAgenda:
         self.db.registrar(fila_id, "apuntado", titulo)
         return fila_id
 
-    def clasificar(self, evento_id, tipo=None, letrado=None, expediente=None):
+    def clasificar(self, evento_id, tipo=None, abogado=None, expediente=None):
         """Dice qué es un evento del calendario: reunión, vista, obligación."""
         if self.db.evento(evento_id) is None:
             raise LookupError(f"No hay ningún evento con id {evento_id} en la agenda.")
-        self.db.clasificar(evento_id, tipo=tipo, letrado=letrado, expediente=expediente)
-        self.db.registrar(evento_id, "clasificado", tipo or letrado or expediente)
+        self.db.clasificar(evento_id, tipo=tipo, abogado=abogado, expediente=expediente)
+        self.db.registrar(evento_id, "clasificado", tipo or abogado or expediente)
 
     # --- salida ------------------------------------------------------------
 
-    def agenda(self, desde=None, hasta=None, letrado=None, incluir_cancelados=False):
-        """Lo que hay entre dos fechas: reuniones, vistas, plazos y obligaciones."""
+    def agenda(self, desde=None, hasta=None, abogado=None, incluir_cancelados=False):
+        """Todo lo que hay entre dos fechas, junto y en orden.
+
+        Dos orígenes, y por eso existe este método: lo propio de la agenda
+        -- reuniones, vistas, obligaciones -- sale de su base, y los **hitos con
+        fecha de los expedientes abiertos** se leen del expediente y se
+        proyectan aquí. Verlos por separado no sirve de nada: el valor de una
+        agenda es que el juicio del martes y el plazo del miércoles se miren a
+        la vez.
+
+        Cada fila lleva `origen`: `agenda` o `expediente`. Las del expediente
+        son de solo lectura desde aquí -- se cambian donde viven --, y por eso
+        vienen como diccionarios y no como filas de esta base.
+        """
         desde, hasta = self._ventana(desde, hasta)
-        return self.db.agenda(desde, hasta, letrado=letrado, incluir_cancelados=incluir_cancelados)
+        propios = [dict(f) for f in self.db.agenda(
+            desde, hasta, abogado=abogado, incluir_cancelados=incluir_cancelados)]
+        for fila in propios:
+            fila["origen_fila"] = "agenda"
+        todo = propios + self.hitos_proyectados(desde, hasta, incluir_cancelados)
+        # Por día, y dentro del día lo que no tiene hora primero: un plazo es de
+        # todo el día y un juicio es a las diez.
+        return sorted(todo, key=lambda f: ((f["inicio_local"] or "")[:10],
+                                           0 if f["todo_el_dia"] else 1,
+                                           f["inicio_local"] or ""))
+
+    def hitos_proyectados(self, desde, hasta, incluir_cancelados=False):
+        """Los hitos con fecha de los expedientes abiertos, como filas de agenda.
+
+        Se leen, no se copian. Si mañana cambia la fecha de un plazo, cambia en
+        el expediente y aquí se ve al instante, porque aquí no hay nada que
+        actualizar.
+        """
+        expedientes = self.expedientes
+        filas = []
+        for expediente in expedientes.listar("abierto"):
+            for hito in expedientes.hitos(expediente["id"]):
+                fecha = (hito["fecha"] or "")[:10]
+                if not fecha or not (desde <= fecha <= hasta):
+                    continue
+                vida = expedientes_db.vida_efectiva(hito)
+                if vida == "cancelado" and not incluir_cancelados:
+                    continue
+                filas.append({
+                    "id": None,
+                    "origen_fila": "expediente",
+                    "expediente": expediente["referencia"],
+                    "expediente_id": expediente["id"],
+                    "orden": hito["orden"],
+                    "tipo": hito["clase"],
+                    "vida": vida,
+                    "titulo": hito["nombre"],
+                    "lugar": expediente["organo"],
+                    "inicio_local": fecha,
+                    "fin_local": fecha,
+                    "todo_el_dia": 1,
+                    "cancelado": 1 if vida == "cancelado" else 0,
+                    "estado": hito["clase_fecha"],
+                    "abogado": None,
+                })
+        return filas
 
     def colisiones(self, desde=None, hasta=None):
         """Compromisos que se pisan. Es la mitad del valor de tener agenda.
 
-        Dos señalamientos del mismo letrado a la misma hora son la causa de
+        Dos señalamientos del mismo abogado a la misma hora son la causa de
         suspensión más frecuente, y se ven con semanas de antelación si alguien
         mira. Mirar es esto.
         """
@@ -184,7 +253,7 @@ class SecAgenda:
         return self.db.colisiones(desde, hasta)
 
     def publicar(self, evento_id):
-        """Escribe en el calendario del letrado un evento que nació aquí.
+        """Escribe en el calendario del abogado un evento que nació aquí.
 
         Solo a petición explícita, nunca durante una sincronización: escribir
         en el calendario de alguien es una acción hacia fuera, y una agenda que
@@ -196,7 +265,7 @@ class SecAgenda:
             raise LookupError(f"No hay ningún evento con id {evento_id} en la agenda.")
         if fila["origen"] == "calendario":
             raise ValueError(
-                f"El evento {evento_id} ya vino del calendario del letrado: publicarlo lo duplicaría."
+                f"El evento {evento_id} ya vino del calendario del abogado: publicarlo lo duplicaría."
             )
         identificador = self.calendario.crear_evento(dict(fila))
         self.db.registrar(evento_id, "publicado", f"{self.calendario.proveedor}:{identificador}")

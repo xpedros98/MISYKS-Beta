@@ -1,4 +1,4 @@
-"""Las credenciales de la cuenta del letrado, compartidas por los módulos que
+"""Las credenciales de la cuenta del abogado, compartidas por los módulos que
 las necesitan.
 
 No es un componente: no hace ningún trabajo del despacho. Es lo que impide que

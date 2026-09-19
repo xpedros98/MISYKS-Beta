@@ -5,9 +5,7 @@
     python -m sec.agenda colisiones [--desde F] [--hasta F]    lo que se pisa
     python -m sec.agenda apuntar TITULO FECHA [--fin F] [--tipo T] [--dia-completo]
                                 [--repetir-cada-anio] [--lugar L]
-    python -m sec.agenda clasificar ID --tipo T [--letrado L] [--expediente E]
-    python -m sec.agenda plazo ID FECHA ASUNTO [--expediente E] [--organo O]
-                                [--estado firme|provisional] [--franja F]
+    python -m sec.agenda clasificar ID --tipo T [--abogado L] [--expediente E]
     python -m sec.agenda publicar ID                           lo escribe en el calendario
     python -m sec.agenda acciones [N]                          qué se ha hecho y cuándo
 
@@ -16,9 +14,9 @@ La cuenta es la misma que la del correo y se conecta una sola vez, desde
 (ARQUITECTURA.md §8.6). Si `python -m sec.mail estado` dice «conectado», la
 agenda ya puede trabajar.
 
-`plazo` está para lo que todavía no existe: cuando `pro.calendario` tenga motor
-de días, será él quien llame a `anotar_plazo`. Mientras tanto se anota a mano,
-que es también la forma de comprobar que los avisos de adelanto funcionan.
+Los plazos no se tocan desde aquí: son hitos del expediente y se manejan con
+`python -m expedientes` (hecho, pausar, reanudar, cancelar). Esta agenda los
+enseña porque hay que verlos junto a las vistas, pero no los guarda.
 """
 import argparse
 import sys
@@ -40,7 +38,7 @@ def main():
 
     con_ventana("sincronizar", "trae los eventos del calendario de la cuenta")
     s = con_ventana("agenda", "muestra lo que hay entre dos fechas")
-    s.add_argument("--letrado", default=None)
+    s.add_argument("--abogado", default=None)
     s.add_argument("--cancelados", action="store_true", help="incluye lo anulado")
     con_ventana("colisiones", "compromisos que se pisan")
 
@@ -53,25 +51,15 @@ def main():
     s.add_argument("--repetir-cada-anio", dest="anual", action="store_true",
                    help="lo convierte en anual al publicarlo (RRULE:FREQ=YEARLY)")
     s.add_argument("--lugar", default=None)
-    s.add_argument("--letrado", default=None)
+    s.add_argument("--abogado", default=None)
 
     s = sub.add_parser("clasificar", help="dice qué es un evento traído del calendario")
     s.add_argument("id", type=int)
     s.add_argument("--tipo", choices=TIPOS, default=None)
-    s.add_argument("--letrado", default=None)
+    s.add_argument("--abogado", default=None)
     s.add_argument("--expediente", default=None)
 
-    s = sub.add_parser("plazo", help="anota un plazo YA CALCULADO por procesal")
-    s.add_argument("plazo_id", help="identificador del plazo en procesal")
-    s.add_argument("fecha", help="fecha límite, ISO. Calculada fuera: aquí no se computa nada")
-    s.add_argument("asunto")
-    s.add_argument("--expediente", default=None)
-    s.add_argument("--organo", default=None)
-    s.add_argument("--estado", choices=("firme", "provisional"), default="firme")
-    s.add_argument("--franja", choices=("holgado", "ajustado", "critico", "vencido"), default=None)
-    s.add_argument("--letrado", default=None)
-
-    s = sub.add_parser("publicar", help="escribe en el calendario del letrado un evento nacido aquí")
+    s = sub.add_parser("publicar", help="escribe en el calendario del abogado un evento nacido aquí")
     s.add_argument("id", type=int)
 
     s = sub.add_parser("acciones", help="registro de lo hecho sobre cada evento")
@@ -99,7 +87,7 @@ def ejecutar(args):
                 f"{r['cancelados']} cancelados{fuera} (recorrido {recorrido})."
             )
         elif args.orden == "agenda":
-            filas = agente.agenda(args.desde, args.hasta, args.letrado, args.cancelados)
+            filas = agente.agenda(args.desde, args.hasta, args.abogado, args.cancelados)
             if not filas:
                 print("No hay nada anotado en esa ventana.")
             for f in filas:
@@ -109,11 +97,11 @@ def ejecutar(args):
             if not choques:
                 print("Sin colisiones en esa ventana.")
             for c in choques:
-                marca = "MISMO LETRADO" if c["ambito"] == "mismo_letrado" else "despacho"
+                marca = "MISMO ABOGADO" if c["ambito"] == "mismo_abogado" else "despacho"
                 print(
-                    f"[{marca}] {c['a_inicio'][:16]}  {c['a_titulo']}  ({c['a_tipo']}, {c['a_letrado']})\n"
+                    f"[{marca}] {c['a_inicio'][:16]}  {c['a_titulo']}  ({c['a_tipo']}, {c['a_abogado']})\n"
                     f"{'':<16}  choca con {c['b_inicio'][:16]}  {c['b_titulo']}  "
-                    f"({c['b_tipo']}, {c['b_letrado']})"
+                    f"({c['b_tipo']}, {c['b_abogado']})"
                 )
         elif args.orden == "apuntar":
             fila_id = agente.apuntar(
@@ -124,31 +112,12 @@ def ejecutar(args):
                 todo_el_dia=args.dia_completo or len(args.inicio) <= 10,
                 lugar=args.lugar,
                 repeticion="RRULE:FREQ=YEARLY" if args.anual else None,
-                letrado=args.letrado,
+                abogado=args.abogado,
             )
             print(f"Apuntado con id {fila_id}. Para que salga en el calendario: publicar {fila_id}.")
         elif args.orden == "clasificar":
-            agente.clasificar(args.id, args.tipo, args.letrado, args.expediente)
+            agente.clasificar(args.id, args.tipo, args.abogado, args.expediente)
             print(f"Evento {args.id} clasificado.")
-        elif args.orden == "plazo":
-            que_paso, anterior = agente.anotar_plazo(
-                args.plazo_id,
-                args.fecha,
-                args.asunto,
-                expediente=args.expediente,
-                organo=args.organo,
-                estado=args.estado,
-                franja=args.franja,
-                letrado=args.letrado,
-            )
-            if que_paso == "adelantado":
-                print(f"AVISO: el plazo {args.plazo_id} se ADELANTA de {anterior} a {args.fecha}.")
-            elif que_paso == "retrasado":
-                print(f"El plazo {args.plazo_id} se retrasa de {anterior} a {args.fecha}.")
-            elif que_paso == "igual":
-                print(f"El plazo {args.plazo_id} sigue en {args.fecha}.")
-            else:
-                print(f"Plazo {args.plazo_id} anotado para el {args.fecha} ({args.estado}).")
         elif args.orden == "publicar":
             identificador = agente.publicar(args.id)
             print(f"Evento {args.id} publicado en el calendario ({identificador}).")
@@ -160,15 +129,35 @@ def ejecutar(args):
 
 
 def _linea(f):
+    """Una linea de agenda, venga de donde venga.
+
+    Las de un expediente se marcan con su referencia: en una lista mezclada hay
+    que poder distinguir de un vistazo lo que es del despacho de lo que es de un
+    caso, o la agenda deja de leerse.
+    """
     cuando = f["inicio_local"][:10] if f["todo_el_dia"] else f["inicio_local"][:16].replace("T", " ")
-    estado = ""
-    if f["cancelado"]:
-        estado = "  [ANULADO]"
-    elif f["estado"] == "provisional":
-        estado = "  [provisional]"
+    marca = ""
+    if f.get("origen_fila") == "expediente":
+        vida = f.get("vida")
+        if vida == "ocurrido":
+            marca = "  [hecho]"
+        elif vida == "vencido":
+            # En mayusculas porque es lo unico de esta lista que no admite espera.
+            marca = "  [VENCIDO]"
+        elif vida and vida != "pendiente":
+            marca = f"  [{vida}]"
+        elif f["estado"] == "provisional":
+            marca = "  [provisional]"
+        etiqueta = f"{f['expediente']}"
+    else:
+        if f["cancelado"]:
+            marca = "  [ANULADO]"
+        elif f["estado"] == "provisional":
+            marca = "  [provisional]"
+        etiqueta = f"{f['id']}"
     return (
-        f"{f['id']:>4}  {cuando:<16}  {f['tipo']:<14}  {(f['titulo'] or '(sin título)')[:48]:<48}"
-        f"  {f['lugar'] or ''}{estado}"
+        f"{etiqueta:>14}  {cuando:<16}  {f['tipo']:<14}  "
+        f"{(f['titulo'] or '(sin titulo)')[:44]:<44}  {f['lugar'] or ''}{marca}"
     )
 
 

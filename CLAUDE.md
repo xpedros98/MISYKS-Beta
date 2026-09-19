@@ -1,8 +1,8 @@
 # MISYKS-Beta
 
 Sistema de componentes para un despacho de abogados: recibe documentos, controla
-plazos, investiga, redacta y revisa. Backend en Python, frontend nativo en Rust con
-`iced`. Nueve grupos, 56 componentes diseñados, dos implementados (`sec.mail`, `sec.agenda`).
+plazos, investiga, redacta y revisa. Backend en Python y **dos** frontends nativos en
+Rust con `iced` —el del abogado y el de control—, que comparten el crate `nucleo`. Nueve grupos, 56 componentes diseñados, dos implementados (`sec.mail`, `sec.agenda`).
 
 **Dos clases de componente, y no se mezclan.** Un **agente IA** invoca un modelo de
 lenguaje; un **módulo** es código determinista, sin LLM. «Componente» los engloba;
@@ -24,6 +24,14 @@ hable del módulo de Python, dilo como *paquete*.
 ## Idioma
 
 El proyecto se desarrolla en un contexto de España, pero los tecnicismos pueden tratarse en inglés por conveniencia.
+
+**«Abogado», y «letrado» nunca a secas.** El usuario del sistema es el **abogado**.
+«Letrado» se reserva para el **Letrado de la Administración de Justicia** (**LAJ**), que
+es otro papel —el antiguo secretario judicial: firma decretos y diligencias de
+ordenación y notifica por LexNET— y aparece constantemente en las resoluciones que el
+sistema tiene que leer. El de la otra parte es el **abogado contrario**. Sin esta
+separación, la palabra «Letrado» de un documento se confunde con el usuario, y eso
+acabaría en los prompts de `arc.partes` y `sec.clasificador`.
 
 ## Comandos
 
@@ -49,6 +57,13 @@ python -m expedientes tipos                      # Los 89 tipos documentales del
 python -m expedientes abrir TIPO [--titulo T]    # Abre un expediente; la referencia la pone él
 python -m expedientes listar [--todos]           # Los abiertos, o también los cerrados
 python -m expedientes hitos ID                   # Por dónde pasa el caso: la barra, en texto
+python -m expedientes hecho ID HITO [--fecha F]  # El abogado lo hizo por su cuenta
+python -m expedientes deshacer ID HITO           # Deshace un «hecho» dado sin querer
+python -m expedientes pausar ID HITO MOTIVO      # Suspende un plazo
+python -m expedientes reanudar ID HITO [FECHA]   # Lo reanuda con la fecha recalculada fuera
+python -m expedientes prorrogar ID HITO FECHA    # El órgano amplia el plazo (--resolucion)
+python -m expedientes cancelar ID HITO MOTIVO    # Lo cancela; nunca se borra
+python -m expedientes acciones ID [N]            # Por qué las fechas son las que son
 python -m expedientes fechar ID ORDEN FECHA      # Pone fecha a un hito (--clase, --ocurrido)
 python -m expedientes cerrar ID                  # Lo saca de los abiertos sin borrarlo
 python -m expedientes eliminar ID --si           # Lo borra de verdad
@@ -64,8 +79,7 @@ python -m sec.agenda agenda [--desde F --hasta F] # Reuniones, vistas, plazos y 
 python -m sec.agenda colisiones                  # Compromisos que se pisan
 python -m sec.agenda apuntar TITULO FECHA        # Un compromiso propio (reunión, obligación)
 python -m sec.agenda clasificar ID --tipo TIPO   # Dice si aquel evento era una vista o un café
-python -m sec.agenda plazo ID FECHA ASUNTO       # Anota un plazo YA calculado (lo hará procesal)
-python -m sec.agenda publicar ID                 # Escribe en el calendario del letrado, a petición
+python -m sec.agenda publicar ID                 # Escribe en el calendario del abogado, a petición
 python -m sec.agenda acciones [N]                # Qué se ha hecho sobre cada evento
 ```
 
@@ -82,7 +96,18 @@ python -m pro.calendario festivos ÁMBITO [AÑO]   # Días inhábiles de un siti
 python -m pro.calendario calendario ÁMBITO [AÑO] # El año en rejilla, para mirarlo a ojo
 ```
 
-Frontend (desde `Frontend/`): `cargo run`, `cargo build`, `cargo clippy`.
+Frontend: **dos aplicaciones** en un workspace de Cargo, desde la raíz del repo.
+
+```bash
+cargo run -p misyks-beta-frontend      # La del abogado: expedientes, correo, cuenta
+cargo run -p misyks-beta-admin         # La de control: cobertura del calendario
+cargo check --workspace                # Comprueba las dos y lo compartido
+cargo clippy --workspace
+```
+
+Lo común —acceso a bases, invocación del Backend, configuración local, estilos— vive en
+el crate **`nucleo`** y no se copia: dos copias de `local_config.rs` acabarían escribiendo
+con reglas distintas el archivo que guarda el refresh token y las claves de las bases.
 
 No hay suite de tests ni linter configurados todavía; no inventes órdenes de test.
 
@@ -95,6 +120,12 @@ Detallada en ARQUITECTURA.md.
 COMPONENTES.md los lista: solo incluye si es agente IA o módulo, dónde corre, para qué
 sirve cada uno y sus restricciones. Esas restricciones son invariantes, no estilo: al
 romperlas, el código sigue compilando y aparentemente funcionando.
+
+## Limpieza del servidor
+
+LIMPIEZA.md propone qué quitar de `maat` y qué conservar, con el inventario en el que
+se apoya. Es **propuesta, no parte de trabajo**: nada de lo que hay ahí se ha ejecutado.
+El criterio no es si algo funciona, sino a qué componente de los que faltan le sirve.
 
 ## Historial
 

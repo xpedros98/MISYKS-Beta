@@ -5,7 +5,7 @@ el del contrario y el asunto. Es lo contrario del calendario de festivos, que va
 en SQLite a secas porque es dato público del BOE.
 
 La referencia (`EXP-2026-001`) la pone la base y no quien llama: es lo que el
-letrado va a usar para nombrar el asunto en voz alta, y tiene que ser correlativa
+abogado va a usar para nombrar el asunto en voz alta, y tiene que ser correlativa
 por año sin huecos raros. Se calcula dentro de la misma transacción que la
 inserción, o dos expedientes abiertos a la vez se llevarían el mismo número.
 """
@@ -46,13 +46,72 @@ CREATE TABLE IF NOT EXISTS hitos (
     nombre        TEXT NOT NULL,
     clase         TEXT NOT NULL,   -- acto | limite | senalamiento | resolucion
     norma         TEXT,
-    estado        TEXT NOT NULL DEFAULT 'pendiente',  -- pendiente | ocurrido
+    -- La vida del hito. `vencido` NO está aquí: se deriva al leer (ver
+    -- `vida_efectiva`), porque guardarlo sería que el sistema diera por muerto
+    -- un plazo por su cuenta.
+    estado        TEXT NOT NULL DEFAULT 'pendiente',  -- pendiente | ocurrido | en_pausa | cancelado
     fecha         TEXT,            -- ISO; vacía mientras no se sepa
     clase_fecha   TEXT,            -- real | limite | provisional | sin_senalar
+    -- Quién lo dio por hecho, y es la distinción que pide `pro.acuse`:
+    -- `acuse` hay justificante y consta; `abogado` lo dice quien lo hizo por su
+    -- cuenta, fuera de MISYKS, y es una declaración.
+    cerrado_por   TEXT,            -- acuse | abogado
+    cerrado_en    TEXT,            -- fecha del hecho, no del registro
+    motivo        TEXT,            -- por qué se pausó o se canceló
+    -- Referencia de la resolución que concedió una prórroga, si la hubo. Una
+    -- fecha prorrogada no es una fecha recalculada: la movió el órgano, no
+    -- nosotros, y quien mire la barra tiene que poder distinguirlo.
+    prorroga      TEXT,
+    -- El documento que lo acredita. Reservado: todavía no hay dónde guardar
+    -- documentos del expediente, así que hoy va siempre vacío.
+    documento_id  INTEGER,
     revisado      INTEGER NOT NULL DEFAULT 0,  -- ¿lo ha validado un abogado?
     UNIQUE (expediente_id, orden)
 );
+-- Todo lo que le pasa a un hito queda aquí. No es auditoría por gusto: el
+-- contrato de todo lo que toca plazos exige que una fecha se pueda explicar, y
+-- una fecha sin su historia solo se puede creer. Con esto se puede reconstruir
+-- por qué el vencimiento es el que es -- una pausa, una prórroga del órgano, un
+-- recálculo -- y cuándo se supo cada cosa.
+CREATE TABLE IF NOT EXISTS acciones (
+    id            INTEGER PRIMARY KEY,
+    expediente_id INTEGER NOT NULL REFERENCES expedientes(id) ON DELETE CASCADE,
+    orden         INTEGER,          -- el hito; vacío si es del expediente entero
+    accion        TEXT NOT NULL,
+    detalle       TEXT,
+    fecha         TEXT NOT NULL     -- cuándo se registró, no cuándo ocurrió
+);
+CREATE INDEX IF NOT EXISTS acciones_por_expediente ON acciones (expediente_id, id);
 """
+
+# Los estados por los que pasa un hito. Los tres últimos solo tienen sentido en
+# los de clase `limite` -- los plazos --, que son los únicos que se suspenden o
+# se cancelan; una vista o una sentencia solo están pendientes u ocurridas.
+ESTADOS = ("pendiente", "ocurrido", "en_pausa", "cancelado")
+
+# Quién da un hito por hecho. `acuse`: hay justificante y consta. `abogado`: lo
+# hizo por su cuenta, fuera del sistema, y lo está declarando.
+CIERRES = ("acuse", "abogado")
+
+
+def vida_efectiva(hito, hoy=None):
+    """En qué punto está el hito, contando el paso del tiempo.
+
+    `vencido` se calcula aquí y no se guarda. Escribirlo significaría que el
+    sistema decide por su cuenta que un plazo ha muerto, y dar un asunto por
+    perdido es demasiado grave para hacerlo en silencio -- además de que la
+    decisión es de `pro.caducidad`, no de un almacén.
+
+    Solo vence un **plazo** (`limite`) con fecha **firme**: si la fecha es
+    `provisional` todavía puede moverse, y con datos dudosos no hay vencido.
+    """
+    if hito["estado"] != "pendiente" or hito["clase"] != "limite":
+        return hito["estado"]
+    if hito["clase_fecha"] != "limite":
+        return "pendiente"
+    fecha = (hito["fecha"] or "")[:10]
+    return "vencido" if fecha and fecha < (hoy or _hoy()) else "pendiente"
+
 
 # El arquetipo y el destino se copian del catálogo al abrir, en vez de mirarse
 # cada vez: si mañana se corrige la matriz de §5, un expediente ya abierto no
@@ -81,12 +140,28 @@ class BaseDatos:
             self.conn.close()
             raise RuntimeError(f"No se pudo abrir {ruta}: clave incorrecta o archivo dañado ({e}).")
         self.conn.executescript(ESQUEMA)
+        self._anadir_columnas_que_falten()
         if nueva:
             os.chmod(ruta, 0o600)
         self.conn.row_factory = sqlcipher.Row
 
     def cerrar(self):
         self.conn.close()
+
+    def _anadir_columnas_que_falten(self):
+        """Pone al día una base creada por una versión anterior del esquema.
+
+        `CREATE TABLE IF NOT EXISTS` no toca una tabla que ya existe, así que
+        una columna añadida después no aparecería y la primera escritura
+        fallaría con `no such column`.
+        """
+        columnas = {f[1] for f in self.conn.execute("PRAGMA table_info(hitos)")}
+        for nombre, tipo in (("cerrado_por", "TEXT"), ("cerrado_en", "TEXT"),
+                             ("motivo", "TEXT"), ("documento_id", "INTEGER"),
+                             ("prorroga", "TEXT")):
+            if nombre not in columnas:
+                self.conn.execute(f"ALTER TABLE hitos ADD COLUMN {nombre} {tipo}")
+        self.conn.commit()
 
     def abrir_expediente(self, tipo, titulo=None, cliente=None, contrario=None, organo=None):
         """Crea el expediente y devuelve su fila. La referencia la pone la base.
@@ -173,6 +248,160 @@ class BaseDatos:
         self.conn.commit()
         if cursor.rowcount == 0:
             raise LookupError(f"El expediente {expediente_id} no tiene ningún hito {orden}.")
+        self.registrar(expediente_id, "fechado", f"{fecha} ({clase_fecha})", orden)
+
+    # --- la vida de un hito -----------------------------------------------
+    #
+    # Las transiciones se **reciben**. Quien decide que algo ha ocurrido es el
+    # acuse de `pro.acuse`, una notificación que entra por LexNET, o el abogado
+    # diciendo que lo hizo por su cuenta. El almacén anota, no deduce.
+
+    def marcar_hecho(self, expediente_id, orden, por="abogado", fecha=None,
+                     documento_id=None):
+        """Da un hito por realizado. `por` es 'acuse' o 'abogado'.
+
+        La fecha es la **del hecho**, no la del registro, y se guarda siempre:
+        de ella cuelgan plazos posteriores -- el del silencio administrativo se
+        cuenta desde la presentación, no desde el día en que alguien pulsó el
+        botón--, y marcar sin fecha es perder ese dato para siempre.
+
+        `documento_id` está previsto y hoy va vacío: cuando el expediente tenga
+        dónde guardar documentos, un hito `acuse` llevará el suyo y entonces
+        acreditado dejará de ser una palabra para ser un fichero.
+        """
+        if por not in CIERRES:
+            raise ValueError(f"Cierre desconocido: {por}. Los que hay: {', '.join(CIERRES)}.")
+        cuando = fecha or _hoy()
+        hito = self._cambiar_hito(
+            expediente_id, orden, "ocurrido",
+            cerrado_por=por, cerrado_en=cuando, documento_id=documento_id,
+        )
+        self.registrar(expediente_id, f"hecho_{por}", f"realizado el {cuando}", orden)
+        return hito
+
+    def deshacer_hito(self, expediente_id, orden):
+        """Devuelve a pendiente un hito marcado por error.
+
+        Marcar es un clic y los clics se dan sin querer; si no se pudiera
+        deshacer, el remedio sería peor: alguien editando la base a mano.
+        """
+        hito = self.hito(expediente_id, orden)
+        if hito["estado"] != "ocurrido":
+            raise ValueError(f"El hito {orden} no está marcado como hecho: está {hito['estado']}.")
+        deshecho = self._cambiar_hito(expediente_id, orden, "pendiente",
+                                      cerrado_por=None, cerrado_en=None, documento_id=None)
+        self.registrar(expediente_id, "hecho_deshecho",
+                       f"estaba dado por hecho por {hito['cerrado_por']}", orden)
+        return deshecho
+
+    def pausar_hito(self, expediente_id, orden, motivo):
+        """Suspende un plazo por un hecho registrado. El motivo es obligatorio.
+
+        Una pausa sin causa anotada no se puede explicar después, y explicar por
+        qué una fecha es la que es forma parte del contrato de todo lo que toca
+        plazos.
+        """
+        if not motivo:
+            raise ValueError("Una pausa necesita motivo: sin él no se puede explicar la fecha.")
+        self.registrar(expediente_id, "en_pausa", motivo, orden)
+        return self._cambiar_hito(expediente_id, orden, "en_pausa", motivo=motivo)
+
+    def reanudar_hito(self, expediente_id, orden, fecha=None):
+        """Reanuda un plazo pausado, con la fecha que trae quien reanuda.
+
+        La fecha nueva llega **ya recalculada**: al reanudarse el vencimiento se
+        mueve -- eso es lo que distingue una pausa de una marca decorativa --,
+        pero el cálculo es de `pro.caducidad`.
+        """
+        hito = self.hito(expediente_id, orden)
+        if hito["estado"] != "en_pausa":
+            raise ValueError(f"El hito {orden} no está en pausa: está {hito['estado']}.")
+        campos = {"motivo": None}
+        if fecha:
+            campos["fecha"] = fecha
+        self.registrar(expediente_id, "reanudado",
+                       f"nueva fecha {fecha}" if fecha else "sin fecha nueva", orden)
+        return self._cambiar_hito(expediente_id, orden, "pendiente", **campos)
+
+    def prorrogar_hito(self, expediente_id, orden, nueva_fecha, resolucion=None):
+        """El órgano concede más plazo. **No es una pausa ni un recálculo.**
+
+        Las tres mueven la fecha y las tres son cosas distintas, y confundirlas
+        deja un vencimiento que nadie sabe explicar:
+
+        - *pausa*: el plazo se detiene por un hecho tasado y se reanuda.
+        - *recálculo*: la fecha estaba mal o le faltaba un dato, y `procesal` la
+          corrige; el plazo siempre fue ese.
+        - *prórroga*: el plazo era ese y **el órgano lo ha ampliado**. La fecha
+          nueva no se deduce de ninguna regla nuestra: viene en una resolución.
+
+        Solo se prorroga un plazo. Un señalamiento no se prorroga: se cambia de
+        fecha, que es otra cosa y la decide el juzgado.
+        """
+        hito = self.hito(expediente_id, orden)
+        if hito["clase"] != "limite":
+            raise ValueError(
+                f"El hito {orden} ({hito['nombre']}) no es un plazo: es de clase "
+                f"'{hito['clase']}', y solo se prorroga un plazo."
+            )
+        if not nueva_fecha:
+            raise ValueError("Una prórroga necesita la fecha nueva que concede el órgano.")
+        anterior = hito["fecha"]
+        self.conn.execute(
+            "UPDATE hitos SET fecha = ?, clase_fecha = 'limite', prorroga = ? "
+            "WHERE expediente_id = ? AND orden = ?",
+            (nueva_fecha, resolucion or "sin referencia", expediente_id, orden),
+        )
+        self.conn.commit()
+        self.registrar(expediente_id, "prorrogado",
+                       f"{anterior or 'sin fecha'} -> {nueva_fecha}"
+                       + (f" ({resolucion})" if resolucion else ""), orden)
+        return self.hito(expediente_id, orden)
+
+    def registrar(self, expediente_id, accion, detalle=None, orden=None):
+        """Anota algo que le ha pasado a un hito, o al expediente entero."""
+        self.conn.execute(
+            "INSERT INTO acciones (expediente_id, orden, accion, detalle, fecha) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (expediente_id, orden, accion, detalle, _ahora()),
+        )
+        self.conn.commit()
+
+    def acciones(self, expediente_id, limite=100):
+        """Lo que le ha pasado a este expediente, lo más reciente primero."""
+        return self.conn.execute(
+            "SELECT * FROM acciones WHERE expediente_id = ? ORDER BY id DESC LIMIT ?",
+            (expediente_id, limite),
+        ).fetchall()
+
+    def cancelar_hito(self, expediente_id, orden, motivo):
+        """Cancela el hito por un motivo registrado. Nunca se borra."""
+        if not motivo:
+            raise ValueError("Cancelar un hito necesita motivo registrado.")
+        self.registrar(expediente_id, "cancelado", motivo, orden)
+        return self._cambiar_hito(expediente_id, orden, "cancelado", motivo=motivo)
+
+    def hito(self, expediente_id, orden):
+        fila = self.conn.execute(
+            "SELECT * FROM hitos WHERE expediente_id = ? AND orden = ?",
+            (expediente_id, orden),
+        ).fetchone()
+        if fila is None:
+            raise LookupError(f"El expediente {expediente_id} no tiene ningún hito {orden}.")
+        return fila
+
+    def _cambiar_hito(self, expediente_id, orden, estado, **campos):
+        if estado not in ESTADOS:
+            raise ValueError(f"Estado desconocido: {estado}. Los que hay: {', '.join(ESTADOS)}.")
+        self.hito(expediente_id, orden)  # existe, o LookupError con su mensaje
+        campos["estado"] = estado
+        asignaciones = ", ".join(f"{c} = ?" for c in campos)
+        self.conn.execute(
+            f"UPDATE hitos SET {asignaciones} WHERE expediente_id = ? AND orden = ?",
+            tuple(campos.values()) + (expediente_id, orden),
+        )
+        self.conn.commit()
+        return self.hito(expediente_id, orden)
 
     def expediente(self, fila_id):
         return self.conn.execute("SELECT * FROM expedientes WHERE id = ?", (fila_id,)).fetchone()
@@ -222,3 +451,9 @@ class BaseDatos:
 
 def _ahora():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _hoy():
+    # Fecha local y no UTC: «hoy» para un plazo es el día del calendario en el
+    # que vive el abogado.
+    return date.today().isoformat()

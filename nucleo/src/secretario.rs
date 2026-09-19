@@ -70,6 +70,34 @@ pub fn sincronizar(limite: i64) -> Result<String, SecMailError> {
     orden_secmail(&["sincronizar", "--limite", &limite.to_string()])
 }
 
+/// Lanza el consentimiento OAuth **en un hilo aparte** y avisa al terminar.
+///
+/// Es lo que permite que la ventana siga viva mientras la persona elige cuenta
+/// en el navegador. Antes se llamaba a `conectar` dentro de `update`, que
+/// bloquea el bucle de eventos de `iced` hasta cinco minutos: la ventana no
+/// repintaba, el navegador podía abrirse detrás y desde fuera parecía que el
+/// botón no hacía nada -- que es justo como se veía en macOS.
+///
+/// El trabajo va a un hilo del sistema y no al ejecutor asíncrono: es una
+/// espera **bloqueante** de un subproceso, y meterla en una tarea asíncrona
+/// ocuparía un hilo del ejecutor igual, solo que disimulado.
+pub fn conectar_async(proveedor: String) -> iced::Task<Result<String, SecMailError>> {
+    let (envio, recepcion) = iced::futures::channel::oneshot::channel();
+    std::thread::spawn(move || {
+        let _ = envio.send(conectar(&proveedor));
+    });
+    iced::Task::perform(
+        async move {
+            recepcion.await.unwrap_or_else(|_| {
+                Err(SecMailError::Sincronizacion(
+                    "el proceso de conexion termino sin decir nada".to_string(),
+                ))
+            })
+        },
+        |r| r,
+    )
+}
+
 /// Lanza el consentimiento OAuth: abre el navegador en el dominio del
 /// proveedor y espera a que la persona autorice.
 ///

@@ -128,6 +128,17 @@ volver a conectar: no es un fallo, es cómo trata Google a las apps sin publicar
 Y `python -m sec.mail estado` dirá entonces `revocado`, que es el estado previsto
 para eso.
 
+**Dos aplicaciones, un solo comando cada una.** Desde la raíz del repo:
+
+```bash
+cargo run -p misyks-beta-frontend   # la del abogado
+cargo run -p misyks-beta-admin      # la de control, para el equipo
+```
+
+La primera vez tarda: compila OpenSSL desde cero. En Windows necesita un Perl con
+`Locale::Maketext::Simple` —el de Strawberry Perl lo trae; el de Git Bash, no—, así que
+si falla ahí, compílalo desde PowerShell. En macOS no hay nada que hacer.
+
 **La agenda no se conecta aparte.** Ese mismo consentimiento trae el calendario, así
 que `sec.agenda` ya puede trabajar en cuanto `estado` diga `conectado`:
 

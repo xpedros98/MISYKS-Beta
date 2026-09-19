@@ -5,10 +5,15 @@ correo: son dos módulos y cada uno responde de lo suyo. Comparten el archivo de
 credenciales porque la cuenta es una sola; no tienen por qué compartir datos.
 
 **Una sola tabla de eventos, con `tipo` y `origen`.** Un juicio que llega del
-calendario del letrado, una reunión escrita a mano y un plazo que entrega
-`procesal` acaban todos en la misma agenda y se miran juntos o no sirven de
-nada. Lo que cambia entre ellos -- si se pueden mover, quién los produjo, si
-son firmes -- son columnas, no tablas.
+calendario del abogado y una reunión escrita a mano acaban en la misma agenda y
+se miran juntas o no sirven de nada. Lo que cambia entre ellas -- si se pueden
+mover, quién las produjo -- son columnas, no tablas.
+
+**Los plazos no están aquí.** Son hitos del expediente y viven en
+`expedientes.hitos`, que es su única verdad: la misma fecha guardada en dos
+sitios acaba divergiendo, y es justo el fallo contra el que avisa el resto de
+este proyecto. La agenda los **proyecta** para poder enseñarlos junto a las
+vistas y las reuniones (ver `agent.agenda`), pero no los guarda ni los cambia.
 """
 import os
 import re
@@ -28,9 +33,9 @@ CREATE TABLE IF NOT EXISTS eventos (
     evento_id    TEXT NOT NULL,            -- identificador en el proveedor, o el nuestro
     serie_id     TEXT,                     -- serie a la que pertenece, si es una repetición
     repeticion   TEXT,                     -- RRULE con la que se creó, si nació aquí
-    tipo         TEXT NOT NULL,            -- sin_clasificar | reunion | vista | plazo | obligacion
+    tipo         TEXT NOT NULL,            -- sin_clasificar | reunion | vista | obligacion
     origen       TEXT NOT NULL,            -- calendario | procesal | manual
-    letrado      TEXT,                     -- de quién es la agenda; se cruzan entre sí
+    abogado      TEXT,                     -- de quién es la agenda; se cruzan entre sí
     titulo       TEXT,
     lugar        TEXT,
     descripcion  TEXT,
@@ -75,18 +80,23 @@ CREATE TABLE IF NOT EXISTS acciones (
 """
 
 # `sin_clasificar` es el tipo con el que entra todo lo que viene del calendario
-# del letrado: la API no dice si un evento es un juicio o un café, y suponerlo
+# del abogado: la API no dice si un evento es un juicio o un café, y suponerlo
 # es exactamente lo que no debe hacer un módulo. Lo fija después `clasificar`.
-TIPOS = ("sin_clasificar", "reunion", "vista", "plazo", "obligacion")
+TIPOS = ("sin_clasificar", "reunion", "vista", "obligacion")
 
-# Los que ocupan una hora del letrado y por tanto pueden chocar entre sí. Un
-# plazo es una fecha dura sin hora: no colisiona con nadie, vence.
+# Los que ocupan una hora del abogado y por tanto pueden chocar entre sí. Lo
+# que no tiene hora -- un plazo del expediente, una obligación -- no colisiona.
 #
 # `sin_clasificar` cuenta como ocupado a propósito, y es la misma prudencia que
 # `pro.calendario` aplica a los festivos que le faltan: un aviso de colisión que
 # resulta ser un café se descarta en dos segundos; una vista sin clasificar que
 # no avisa de que pisa otra se descubre el día del señalamiento.
 TIPOS_CON_HORA = ("sin_clasificar", "reunion", "vista")
+
+# Campos que una reescritura de la fila **no** puede tocar. Los ponen personas o
+# transiciones explícitas, y una sincronización del calendario o un plazo que
+# `procesal` vuelve a anotar no sabe nada de ellos.
+PROTEGIDOS = ("tipo", "abogado")
 
 
 def abrir(ruta=None):
@@ -131,6 +141,14 @@ class BaseDatos:
         # cuando esto corre, así que las filas son tuplas. En `table_info`, el
         # nombre de la columna es el campo 1.
         columnas = {f[1] for f in self.conn.execute("PRAGMA table_info(eventos)")}
+        # `letrado` pasó a llamarse `abogado`: son la misma persona y el sistema
+        # habla de una sola. «Letrado» se reserva para el **Letrado de la
+        # Administración de Justicia**, que es otro papel —firma decretos y
+        # notifica por LexNET— y aparece en las resoluciones que hay que leer.
+        # Se renombra la columna en vez de crear otra: los datos son los mismos.
+        if "letrado" in columnas and "abogado" not in columnas:
+            self.conn.execute("ALTER TABLE eventos RENAME COLUMN letrado TO abogado")
+            columnas.add("abogado")
         for nombre, tipo in (("repeticion", "TEXT"),):
             if nombre not in columnas:
                 self.conn.execute(f"ALTER TABLE eventos ADD COLUMN {nombre} {tipo}")
@@ -177,15 +195,16 @@ class BaseDatos:
         que permite que `sec.notificador` avise solo de lo que ha cambiado en
         vez de repetir la agenda entera cada vez que alguien sincroniza.
 
-        El `tipo` y el `letrado` de una fila ya existente **no se pisan**: los
+        El `tipo` y el `abogado` de una fila ya existente **no se pisan**: los
         pone quien clasifica (hoy, una persona), y una sincronización posterior
         no tiene por qué saber que aquel evento del calendario era una vista.
+
         """
         campos = {
             clave: evento.get(clave)
             for clave in (
                 "proveedor", "cuenta", "evento_id", "serie_id", "repeticion", "tipo",
-                "origen", "letrado",
+                "origen", "abogado",
                 "titulo", "lugar", "descripcion", "inicio_local", "fin_local", "zona",
                 "inicio_utc", "fin_utc", "todo_el_dia", "cancelado", "organizador",
                 "asistentes", "expediente", "estado", "franja",
@@ -212,8 +231,7 @@ class BaseDatos:
         cambios = {
             clave: valor
             for clave, valor in campos.items()
-            # `tipo` y `letrado` se respetan si ya estaban clasificados a mano.
-            if clave not in ("tipo", "letrado") and valor != anterior[clave]
+            if clave not in PROTEGIDOS and valor != anterior[clave]
         }
         if not cambios:
             return "igual", anterior["id"]
@@ -235,10 +253,10 @@ class BaseDatos:
     def evento(self, fila_id):
         return self.conn.execute("SELECT * FROM eventos WHERE id = ?", (fila_id,)).fetchone()
 
-    def clasificar(self, fila_id, tipo=None, letrado=None, expediente=None):
+    def clasificar(self, fila_id, tipo=None, abogado=None, expediente=None):
         """Dice qué es un evento que llegó del calendario sin decirlo.
 
-        Del calendario del letrado no viene el tipo: un evento llamado «Juicio
+        Del calendario del abogado no viene el tipo: un evento llamado «Juicio
         Pérez» es una vista y otro llamado «Café con Marta» no, y nada en la
         API lo distingue. Hasta que `sec.clasificador` mire el título, esto lo
         pone una persona, y por eso una sincronización posterior no lo pisa.
@@ -248,8 +266,8 @@ class BaseDatos:
             if tipo not in TIPOS:
                 raise ValueError(f"Tipo de evento desconocido: {tipo}. Los que hay: {', '.join(TIPOS)}.")
             cambios["tipo"] = tipo
-        if letrado is not None:
-            cambios["letrado"] = letrado
+        if abogado is not None:
+            cambios["abogado"] = abogado
         if expediente is not None:
             cambios["expediente"] = expediente
         if not cambios:
@@ -287,64 +305,15 @@ class BaseDatos:
         self.conn.commit()
         return desaparecidos
 
-    # --- plazos que entrega procesal --------------------------------------
-
-    def anotar_plazo(self, plazo_id, fecha_limite, asunto, expediente=None, organo=None,
-                     estado="firme", franja=None, letrado=None):
-        """Anota o actualiza un plazo calculado por `procesal`.
-
-        **La agenda no computa: recibe.** Aquí no se suma ni un día; lo que
-        llega es una fecha ya calculada y lo único que se hace es guardarla y
-        decir si se ha movido respecto a la anterior.
-
-        Devuelve (`qué pasó`, `fecha anterior`), con «qué pasó» en
-        'nuevo' · 'adelantado' · 'retrasado' · 'igual'. La distinción es la que
-        necesita `sec.notificador` y está escrita en COMPONENTES.md: un plazo
-        que se **adelanta** exige aviso inmediato porque puede costar el plazo;
-        uno que se retrasa se actualiza sin interrumpir a nadie.
-        """
-        anterior = self.evento_por_identidad("", f"plazo:{plazo_id}")
-        fecha_anterior = anterior["inicio_local"] if anterior else None
-        self.guardar_evento(
-            {
-                "proveedor": "",
-                "cuenta": "",
-                "evento_id": f"plazo:{plazo_id}",
-                "tipo": "plazo",
-                "origen": "procesal",
-                "letrado": letrado,
-                "titulo": asunto,
-                "lugar": organo,
-                "inicio_local": fecha_limite,
-                "fin_local": fecha_limite,
-                "todo_el_dia": True,
-                "expediente": expediente,
-                "estado": estado,
-                "franja": franja,
-            }
-        )
-        fila = self.evento_por_identidad("", f"plazo:{plazo_id}")
-        if anterior is None:
-            self.registrar(fila["id"], "plazo_anotado", f"{fecha_limite} ({estado})")
-            return "nuevo", None
-        if fecha_anterior == fecha_limite:
-            return "igual", fecha_anterior
-        movimiento = "adelantado" if fecha_limite < fecha_anterior else "retrasado"
-        # El detalle se escribe en ASCII a propósito: acaba imprimiéndose en la
-        # consola, y la de Windows es cp1252, donde una flecha «→» no existe y
-        # revienta el `print` entero con UnicodeEncodeError.
-        self.registrar(fila["id"], f"plazo_{movimiento}", f"{fecha_anterior} -> {fecha_limite}")
-        return movimiento, fecha_anterior
-
     # --- consultas --------------------------------------------------------
 
-    def agenda(self, desde, hasta, letrado=None, incluir_cancelados=False):
+    def agenda(self, desde, hasta, abogado=None, incluir_cancelados=False):
         """Lo que hay entre dos fechas, en orden. Todo junto: es el punto."""
         condiciones = ["substr(inicio_local, 1, 10) BETWEEN ? AND ?"]
         valores = [desde, hasta]
-        if letrado:
-            condiciones.append("letrado = ?")
-            valores.append(letrado)
+        if abogado:
+            condiciones.append("abogado = ?")
+            valores.append(abogado)
         if not incluir_cancelados:
             condiciones.append("cancelado = 0")
         return self.conn.execute(
@@ -363,21 +332,21 @@ class BaseDatos:
         Solo chocan los que ocupan una hora -- reuniones y vistas --. Un plazo
         es una fecha dura sin hora: no colisiona, vence.
 
-        Se devuelven también los pares de **letrados distintos**, marcados como
+        Se devuelven también los pares de **abogados distintos**, marcados como
         'despacho'. No son un error pero hay que verlos: dos señalamientos a la
         misma hora en un despacho de dos personas son dos desplazamientos, y es
         lo que COMPONENTES.md exige al decir que fallar es «no cruzar agendas
-        entre letrados del despacho».
+        entre abogados del despacho».
         """
         tipos = ", ".join(f"'{t}'" for t in TIPOS_CON_HORA)
         return self.conn.execute(
             f"""
             SELECT a.id AS a_id, a.titulo AS a_titulo, a.inicio_local AS a_inicio,
-                   a.fin_local AS a_fin, a.letrado AS a_letrado, a.tipo AS a_tipo,
+                   a.fin_local AS a_fin, a.abogado AS a_abogado, a.tipo AS a_tipo,
                    b.id AS b_id, b.titulo AS b_titulo, b.inicio_local AS b_inicio,
-                   b.fin_local AS b_fin, b.letrado AS b_letrado, b.tipo AS b_tipo,
-                   CASE WHEN IFNULL(a.letrado, '') = IFNULL(b.letrado, '')
-                        THEN 'mismo_letrado' ELSE 'despacho' END AS ambito
+                   b.fin_local AS b_fin, b.abogado AS b_abogado, b.tipo AS b_tipo,
+                   CASE WHEN IFNULL(a.abogado, '') = IFNULL(b.abogado, '')
+                        THEN 'mismo_abogado' ELSE 'despacho' END AS ambito
               FROM eventos a
               JOIN eventos b ON b.id > a.id
              WHERE a.cancelado = 0 AND b.cancelado = 0
@@ -414,3 +383,6 @@ class BaseDatos:
 
 def _ahora():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+

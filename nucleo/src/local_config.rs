@@ -112,7 +112,7 @@ fn restringir_permisos(path: &std::path::Path) -> std::io::Result<()> {
 /// `NT AUTHORITY\SYSTEM`, `BUILTIN\Administrators` y el propio usuario, los
 /// tres con FullControl (comprobado). Dentro estan la contrasena de aplicacion
 /// de Gmail y la clave de `sec_mail.db`, asi que la premisa del diseno -- los
-/// secretos no salen de la maquina del letrado -- pedia cerrarlo.
+/// secretos no salen de la maquina del abogado -- pedia cerrarlo.
 ///
 /// Se usa `icacls` en vez de la API Win32 (`SetNamedSecurityInfo`) para no
 /// arrastrar `windows-sys` y varios bloques `unsafe` por un solo ajuste:

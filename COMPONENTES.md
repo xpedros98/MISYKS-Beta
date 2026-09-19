@@ -29,7 +29,7 @@ escritas.
 
 **Dónde corre cada uno.** Los agentes IA corren todos en el servidor `maat`,
 porque ahí está el modelo. Los módulos corren donde están sus datos y sus
-credenciales: `sec.mail` y `sec.agenda` en el PC del letrado --comparten cuenta y
+credenciales: `sec.mail` y `sec.agenda` en el PC del abogado --comparten cuenta y
 tokens--, y `pro.calendario` también, porque el motor de días consulta expedientes. Su recolector es la excepción que confirma
 la regla: solo lee boletines públicos, así que puede correr en el servidor. Ver
 `ARQUITECTURA.md` §1, «Dónde corre cada componente».
@@ -43,7 +43,7 @@ ni de derecho, y no toca ningún canal procesal.
 
 **`sec.mail`** — receptor · módulo, en local · **implementado** (lo que aún falta, en §8.3)
 Gmail API o Microsoft Graph, **autenticadas por OAuth**, y base local cifrada con
-SQLCipher. Corre en el ordenador del letrado, no en el servidor: tiene el acceso al
+SQLCipher. Corre en el ordenador del abogado, no en el servidor: tiene el acceso al
 correo y lee el contenido sin anonimizar, así que ese contenido no sale de su
 máquina. El «tercer mundo» —iCloud, Fastmail, servidores propios— seguirá siendo
 IMAP con contraseña de aplicación, porque ahí no hay otra vía, pero **no está
@@ -51,7 +51,7 @@ escrito**: no hay adaptador (`ARQUITECTURA.md` §8.6).
 
 - **Contrato:** `{cuenta, ventana}` → `{mensajes[], adjuntos[], resumen}`
 - **Reglas:**
-  - El módulo **lee, no vacía**: el correo permanece en el servidor y el letrado lo
+  - El módulo **lee, no vacía**: el correo permanece en el servidor y el abogado lo
     sigue viendo desde sus propios dispositivos. Tampoco marca como leído.
   - **La identidad del mensaje es `(proveedor, mensaje_id)`**, no el identificador a
     secas: dos proveedores pueden dar el mismo y no son el mismo correo. En Graph,
@@ -110,7 +110,7 @@ torcida y con reflejo.
 (lo que aún falta, en §8.3)
 Google Calendar API con el **mismo consentimiento OAuth que el correo** y base local
 cifrada con SQLCipher. Corre junto a `sec.mail` porque usa sus tokens; §8.6 deja
-abierto si debería vivir en `maat`, para poder avisar con el equipo del letrado
+abierto si debería vivir en `maat`, para poder avisar con el equipo del abogado
 apagado.
 
 - **Contrato:** `{eventos[], plazos_de_procesal[]}` → `{agenda, conflictos[]}`
@@ -128,7 +128,7 @@ apagado.
     efectos de colisiones: la misma prudencia que aplica `pro.calendario` a los
     festivos que le faltan, porque una colisión de más se descarta en dos segundos y
     una de menos se descubre el día del señalamiento.
-  - **Escribir en el calendario del letrado es a petición, nunca automático.** Una
+  - **Escribir en el calendario del abogado es a petición, nunca automático.** Una
     agenda que empieza a crear eventos sola deja de ser de fiar.
   - **La ventana la impone la agenda, no el proveedor.** Google, al preguntarle por lo
     que ha cambiado, contesta con la serie anual entera expandida hasta 2099 aunque se
@@ -136,19 +136,24 @@ apagado.
     guardado, que es como se sabe que algo se ha movido fuera—.
   - Tres clases de entrada con naturaleza distinta: reuniones (internas, movibles),
     juicios y vistas (externas, fijas) y plazos (derivados, con fecha dura).
-  - Detecta **colisiones**: dos señalamientos del mismo letrado a la misma hora es la
+  - Detecta **colisiones**: dos señalamientos del mismo abogado a la misma hora es la
     causa de suspensión más frecuente y se anticipa semanas antes.
   - Guarda obligaciones vivas de documentos ya cerrados —vencimientos de contrato,
     prórrogas, actualizaciones de renta—, que es lo que da vida posterior al
     arquetipo G.
-  - **Recoge el «Hecho» del letrado.** Si presentó por su cuenta, fuera de MISYKS, un
+  - **Los plazos no se guardan aquí: se proyectan.** Un plazo es un **hito del
+    expediente** y vive donde vive el expediente; la agenda lo lee y lo enseña junto a
+    las vistas y las reuniones, que es de donde sale el valor de tener agenda, pero no
+    guarda copia de la fecha. Guardarla era duplicar el mismo dato en dos sitios, y eso
+    acaba en dos fechas distintas sin forma de saber cuál vale.
+  - **Recoge el «Hecho» del abogado.** Si presentó por su cuenta, fuera de MISYKS, un
     clic cierra el plazo como `cumplido`. Guarda la fecha de hoy, que puede cambiar
     —importa si la presentación abre plazos futuros, como el silencio
     administrativo—, se puede deshacer y queda en el log de `sec.notificador`. No es
     verificar nada: es informar de algo que el sistema no puede ver. Sin él, los avisos
     de un plazo ya cumplido seguirían sonando.
 - **Falla si:** calcula plazos por su cuenta; solo mira el día siguiente; no cruza
-  agendas entre letrados del despacho; cierra un plazo con «Hecho» sin guardar la
+  agendas entre abogados del despacho; cierra un plazo con «Hecho» sin guardar la
   fecha de presentación; concluye que un evento ya no existe a partir de una
   sincronización incremental, donde lo que no viene es lo que **no ha cambiado**
   —confundirlo vacía la agenda sin dar ningún error—; o compara horas locales en vez
@@ -157,7 +162,7 @@ apagado.
   `procesal`, los plazos ya calculados.
 
 **`sec.notificador`** — avisos y log
-El letrado no verifica las fechas de plazo (ver `pro.calendario`, en PROCESAL), así
+El abogado no verifica las fechas de plazo (ver `pro.calendario`, en PROCESAL), así
 que el riesgo se desplaza: ya no es tanto calcular mal como que un aviso pase
 desapercibido. Este componente es la mitad de la garantía; la otra mitad es la
 validación del motor de días.
@@ -180,17 +185,17 @@ validación del motor de días.
   - **Comprueba que el aviso se ha visto.** Si un aviso importante no se abre, insiste
     y lo manda también por otra vía.
   - **El estado del plazo manda.** Un plazo `cumplido` —por `pro.acuse` o por el
-    «Hecho» del letrado— deja de generar avisos. Un plazo `vencido` y un **plazo no
+    «Hecho» del abogado— deja de generar avisos. Un plazo `vencido` y un **plazo no
     reconocido** generan aviso siempre, con su explicación.
   - El log es enumerable y consultable, no un flujo efímero de notificaciones.
 - **Falla si:** notifica sin registrar — y entonces no hay constancia de la
-  advertencia; trata todos los avisos igual, y el letrado deja de leerlos; da por
-  avisado al letrado sin comprobar que ha visto un aviso crítico; o sigue avisando de
+  advertencia; trata todos los avisos igual, y el abogado deja de leerlos; da por
+  avisado al abogado sin comprobar que ha visto un aviso crítico; o sigue avisando de
   un plazo ya cumplido.
 
 **`sec.entrega`** — emisor
 Misma conexión de correo, dirección contraria. Dos usos: mandar a firmar y compartir
-con otro letrado.
+con otro abogado.
 
 - **Contrato:** `{documento, destinatario, motivo}` → `{enviado, retorno_esperado?, version_firmada?}`
 - **Reglas:**
@@ -231,7 +236,7 @@ no necesita modelo. Cuál es cuál se fija al escribir sus contratos.
 | componente | uso |
 |---|---|
 | `arc.metadatos` | nº de procedimiento, órgano, autos, fecha |
-| `arc.partes` | demandante, demandado, procurador, letrado contrario |
+| `arc.partes` | demandante, demandado, procurador, abogado contrario, LAJ |
 | `arc.emparejador` | a qué expediente pertenece; devuelve candidatos |
 | `arc.nomenclador` | nombra y ubica el fichero según convención del despacho |
 | `arc.deduplicador` | hash: el mismo documento llegado por dos vías |
@@ -248,7 +253,7 @@ es una tabla mejor.
 **`pro.calendario`** — el motor de días
 Dependencia de todos los demás: ningún plazo se calcula sin pasar por él.
 
-**El letrado no verifica las fechas que produce**: recibe el aviso y actúa. Es una
+**El abogado no verifica las fechas que produce**: recibe el aviso y actúa. Es una
 decisión de diseño, no un descuido: se diseña pensando en un despacho de un solo
 abogado, y el sistema tiene que quitarle trabajo, no dárselo. La consecuencia es que
 nadie más en la cadena va a detectar un error, así que la garantía se reparte en dos:
@@ -305,7 +310,7 @@ la **corrección**, antes de usarlo con clientes (validación, abajo), y la
   - Cuando llega el dato, recalcula solo. Si la fecha se adelanta, `sec.notificador`
     avisa en el acto; si se retrasa, se actualiza sin interrumpir.
 - **Cada fecha tiene su explicación.** El resultado guarda qué reglas y qué festivos se
-  aplicaron y con qué versión del calendario. El letrado no tiene por qué leerla, pero
+  aplicaron y con qué versión del calendario. El abogado no tiene por qué leerla, pero
   si alguien pregunta «¿por qué esta fecha?» hay respuesta, y el cálculo se puede
   repetir aunque el calendario se haya corregido después.
 - **Es un módulo**, sin LLM: corre donde estén los datos de los expedientes, según la
@@ -471,7 +476,7 @@ de ahí todo es tabla y reglas fijas: con los mismos datos, el mismo resultado.
     fechas distintas según por dónde entrara.
   - **Lo que no está en la tabla no se inventa.** Si la resolución fija el plazo («se
     concede un plazo de diez días»), se usa ese. Si no, aviso de **plazo no
-    reconocido** al letrado, y la fila que falta se añade a la tabla. El ecosistema
+    reconocido** al abogado, y la fila que falta se añade a la tabla. El ecosistema
     antiguo, a falta de fila, buscaba un número en el articulado: «un mes» acababa
     convertido en 30 días hábiles, unas seis semanas.
   - **El *dies a quo* sale de reglas, nunca de «hoy».** Depende del medio: una
@@ -482,7 +487,7 @@ de ahí todo es tabla y reglas fijas: con los mismos datos, el mismo resultado.
     correo.
   - **Tres fechas, no una.**
     - *Fecha recomendada*: el último día menos un **margen que depende del tipo de
-      escrito**, fijado en la tabla. Es la que recibe el letrado para organizarse.
+      escrito**, fijado en la tabla. Es la que recibe el abogado para organizarse.
     - *Último día* del plazo.
     - *Último momento legal*: ante los tribunales, hasta las 15:00 del día hábil
       siguiente (art. 135.5 LEC, que desde el RDL 6/2023 vale también para plazos
@@ -491,10 +496,15 @@ de ahí todo es tabla y reglas fijas: con los mismos datos, el mismo resultado.
   - **Franja, no booleano, y calculada, no opinada.** Compara los días que quedan hasta
     la fecha recomendada con el **tiempo de preparación** de ese tipo de escrito: diez
     días sobran para una reposición y no alcanzan para una demanda compleja. MISYKS
-    propone un tiempo aproximado por tipo y **el letrado puede ajustarlo**; el ajuste
+    propone un tiempo aproximado por tipo y **el abogado puede ajustarlo**; el ajuste
     cambia cuándo empiezan los avisos y cuánto insisten, **nunca las fechas**. La
     franja alimenta a `sec.notificador`. En el ecosistema antiguo la prioridad la ponía
     un modelo.
+  - **Y prórroga no es ninguna de las dos.** Una pausa detiene el reloj por un hecho
+    tasado; un recálculo corrige una fecha que estaba mal o le faltaba un dato; una
+    **prórroga** es el órgano ampliando un plazo que estaba bien. La fecha nueva no sale
+    de ninguna regla nuestra: viene en una resolución, y se guarda con su referencia.
+    Confundirlas deja un vencimiento que nadie sabe explicar.
   - **Pausa no es reinicio.** La caducidad sustantiva no se interrumpe, pero se
     suspende en supuestos tasados: la papeleta de conciliación para el plazo del
     despido, que se reanuda al día siguiente del acto o a los quince días hábiles si no
@@ -513,11 +523,11 @@ de ahí todo es tabla y reglas fijas: con los mismos datos, el mismo resultado.
   - **La vida de un plazo:** `abierto` al detectarlo (se anota en `sec.agenda` y
     arrancan los avisos); `en_pausa` por un hecho registrado, y al reanudarse la fecha
     se recalcula; `cumplido` por `pro.acuse` si se presentó desde MISYKS, o por el
-    **«Hecho» del letrado** si presentó por su cuenta; `vencido` por el paso del tiempo,
+    **«Hecho» del abogado** si presentó por su cuenta; `vencido` por el paso del tiempo,
     siempre con aviso; `cancelado` por un motivo registrado, como un desistimiento, y
     nunca se borra.
   - **Vencido detiene el trabajo, pero nunca en silencio.** Bloquea la ruta —no se
-    prepara un escrito caducado— y avisa al letrado explicando qué plazo era, desde
+    prepara un escrito caducado— y avisa al abogado explicando qué plazo era, desde
     cuándo contaba y qué pausas se tuvieron en cuenta: dar un asunto por perdido es
     demasiado grave para que falte un dato, como una conciliación que nadie registró.
     Con datos dudosos no hay `vencido`, hay `provisional`. Si aún cabe el último
@@ -541,7 +551,7 @@ de ahí todo es tabla y reglas fijas: con los mismos datos, el mismo resultado.
 - **Necesita:** `pro.calendario`; la **tabla de plazos** (nota siguiente); los datos
   extraídos del documento, con varias opciones cuando haya duda; las pausas y
   reinicios, de `pro.procedibilidad` y `pro.acuse`; `municipio_organo`, de
-  `pro.destino`; y el tiempo de preparación, si el letrado lo ha ajustado.
+  `pro.destino`; y el tiempo de preparación, si el abogado lo ha ajustado.
 
 *La tabla de plazos.* Una fila por tipo de plazo, con: acto y orden jurisdiccional;
 duración y **cómo se cuenta** (días hábiles procesales, días naturales civiles o meses
@@ -549,7 +559,7 @@ de fecha a fecha); desde cuándo corre; si es **urgente** —entonces agosto y N
 cuentan, y `pro.calendario` necesita saberlo—; qué lo pausa o lo reinicia; si admite el
 último momento legal; qué se pierde si vence; el **margen** de la fecha recomendada;
 el **tiempo de preparación** propuesto; y el artículo, con su identificador BOE, su
-**cita literal** y su vigencia. La mantiene el equipo, no el letrado, con la misma
+**cita literal** y su vigencia. La mantiene el equipo, no el abogado, con la misma
 exigencia que los festivos: sin cita literal, la fila no entra. Primera versión: los 12
 tipos revisados con detalle y los 6 de mayor volumen (`ARQUITECTURA.md` §9 y §8.2).
 
@@ -562,7 +572,7 @@ vivo?** No mira el caso, mira los conceptos.
 puede cerrar una ruta: aquí **no hay campo `bloqueo`** en la salida, y quien lea los dos
 contratos seguidos no debe esperar simetría. El motivo es jurídico, no de diseño: la
 prescripción civil solo existe si el demandado la alega, así que reclamar una partida
-prescrita es una jugada legítima del letrado y no un error del sistema. Como el módulo no
+prescrita es una jugada legítima del abogado y no un error del sistema. Como el módulo no
 puede parar nada, todo su valor está en que el aviso llegue y se pueda discutir: de ahí
 que cada partida salga con su explicación y que el resultado quede registrado en
 `sec.notificador`. Lo que protege al despacho no es el bloqueo, es la constancia de que
@@ -579,10 +589,18 @@ plazo como suspendido sin mover la fecha de vencimiento.
 
 - **Contrato:** `{accion, partidas[], hechos[], ahora}` → `{partidas[], avisos[], version_tabla}`
   - `hechos[]`: cada uno con `clase` (`interrumpe · suspende`), fecha, fecha de fin si
-    suspende, el acto del que sale y su prueba.
+    suspende, el acto del que sale y **quién lo sostiene**: `acuse` si consta con
+    justificante, `abogado` si lo dice quien lo hizo por su cuenta. Es el mismo eje que
+    `expedientes` guarda en sus hitos, y aquí pesa más: de un hecho declarado depende un
+    año entero de cómputo.
   - Cada partida de salida: `{concepto, fecha_nacimiento, plazo_aplicado, fila_tabla, fecha_prescripcion, estado, firmeza, franja, hechos_aplicados[], explicacion}`
   - `estado`: `viva · prescrita`. `firmeza`: `firme · provisional`. **Son dos ejes, no
     uno**: una partida puede estar viva y ser provisional a la vez.
+  - **`prescrita` se deriva al leer, nunca se guarda**, por la misma razón por la que
+    `expedientes` no guarda `vencido`: escribirlo sería el módulo decidiendo que un
+    derecho ha muerto, y este módulo no decide, informa. Y **solo prescribe lo firme**:
+    con una suspensión abierta o una acción sin decidir no hay prescrita, hay
+    provisional.
   - `franja`: `holgado · ajustado · crítico · vencido`, **la misma escala que
     `pro.caducidad`**, para que `sec.notificador` no tenga que aprender dos.
   - `ahora` es obligatorio y la salida lleva la versión de la tabla usada: sin las dos
@@ -611,9 +629,14 @@ plazo como suspendido sin mover la fecha de vencimiento.
     decidida —en penal sale de la pena en abstracto, que exige una calificación que aún
     no se ha hecho—. Entonces el resultado es `provisional` y exige reevaluación.
   - **Toda partida prescrita lleva su explicación**: qué fila, qué artículo y qué hechos
-    se aplicaron, en qué orden. Es lo único con lo que el letrado puede contradecir al
+    se aplicaron, en qué orden. Es lo único con lo que el abogado puede contradecir al
     módulo, y como este no bloquea, contradecirlo es todo lo que hay.
   - **No llama a ningún modelo.**
+- **No confundir con prórroga ni con recálculo.** `expedientes` ya distingue las dos:
+  la prórroga es el órgano ampliando un plazo que estaba bien, y su fecha viene en una
+  resolución; el recálculo corrige una fecha que estaba mal. La interrupción y la
+  suspensión no son ninguna de las dos: la fecha cambia porque **el derecho se ha
+  movido**, no porque nadie la conceda ni porque estuviera equivocada.
 - **Falla si:** devuelve un booleano, o bloquea; olvida un hecho y descarta conceptos
   vivos; convierte años o meses en días; trata una suspensión como interrupción, o al
   revés; aplica los hechos fuera de orden; da fecha firme con una suspensión abierta;
@@ -638,10 +661,15 @@ versión**, porque su plazo depende de la pena en abstracto y eso exige una cali
 que en la puerta no existe. Las citas de esta ficha **están sin comprobar contra el
 BOE**: son la pista por donde empezar, no la fuente.
 
-*Qué se publica en la agenda.* Una sola fecha por expediente, la de la primera partida en
-prescribir. Las demás viven en el módulo y se consultan ahí: un expediente de reclamación
-de cantidad con dieciocho mensualidades enterraría la agenda con dieciocho avisos del
-mismo asunto.
+*Dónde vive la fecha, y qué ve el abogado.* No se publica nada en la agenda: desde que el
+plazo es un **hito del expediente** y `sec.agenda` lo proyecta, publicar sería volver a
+tener el mismo dato en dos sitios. La fecha vive en el expediente y la agenda la enseña
+sola. De las partidas se lleva **una sola, la primera en prescribir**: un expediente de
+reclamación de cantidad con dieciocho mensualidades llenaría la barra de dieciocho nodos
+del mismo asunto, y las demás se consultan en el módulo. **Queda por decidir si ese nodo
+entra en la barra de hitos**, porque la barra está definida como el recorrido procesal
+—lo que pasa en el juzgado— y una fecha de prescripción no es un paso del procedimiento
+sino un límite que corre por fuera.
 
 **`pro.procedibilidad`** — requisitos previos
 El único módulo que puede **desviar el pipeline a otro tipo documental**.
@@ -758,9 +786,9 @@ El más complejo del bloque: no es un sistema, son decenas.
 - **Contrato:** `{justificante, expediente, plazo_id}` → `{hash, audit_entry, plazo_cerrado}`
 - **Reglas:**
   - Hashea el justificante, lo escribe en `audit_log` y **marca el plazo cumplido**.
-  - **Cumplido acreditado no es cumplido declarado.** Si el letrado presentó por su
+  - **Cumplido acreditado no es cumplido declarado.** Si el abogado presentó por su
     cuenta, fuera de MISYKS, el plazo se cierra con su «Hecho» (`sec.agenda`) y no hay
-    justificante: queda como cumplido **por declaración del letrado**, no por acuse,
+    justificante: queda como cumplido **por declaración del abogado**, no por acuse,
     para que la auditoría distinga lo que consta de lo que se ha dicho.
   - Sin él el sistema no sabe que se presentó: los avisos de `sec.notificador` siguen
     vivos y `pro.procedibilidad` bloquearía la siguiente ruta del mismo expediente.
@@ -778,7 +806,7 @@ El más complejo del bloque: no es un sistema, son decenas.
   se mezclan, porque no responden a lo mismo: una dice hasta cuándo se puede actuar
   dentro de un procedimiento, la otra hasta cuándo sigue vivo un derecho. Cada módulo
   vale exactamente lo que valga su tabla. Las dos deben versionarse, tener autoría y
-  fecha de revisión, y ser un dato, no código. **Las mantiene el equipo, no el letrado, y
+  fecha de revisión, y ser un dato, no código. **Las mantiene el equipo, no el abogado, y
   se vigilan:** cada cierto tiempo se consulta en el BOE el texto vigente de cada
   artículo citado y se compara con la cita guardada; si ha cambiado, se avisa al equipo
   para revisar la fila. Es una consulta y una comparación de textos, sin modelo, y no
@@ -846,7 +874,7 @@ las notas del grupo.
     0,13 s en la misma petición repetida. Meter la fecha de hoy en el system prompt
     cuesta ~20 s por iteración.
   - **Devuelve siempre `url`.** Es lo que hace la cita comprobable de verdad: el
-    letrado pincha y ve el original.
+    abogado pincha y ve el original.
 
 - **Falla si:** deja que el modelo reproduzca el texto legal; deriva la parada del
   modelo en vez de del resultado de la herramienta; devuelve una cita sin `url`;
@@ -937,4 +965,4 @@ Devuelve `veto` o `visto_bueno`, con los defectos encontrados.
 | `cri.coherencia` | hechos vs fundamentos vs suplico |
 | `cri.cruzado` | coherencia **entre** documentos de un mismo expediente |
 | `cri.abusividad` | cláusulas: no «¿convence?» sino «¿es válido?» |
-| `cri.riesgo` | exposición del cliente y del letrado |
+| `cri.riesgo` | exposición del cliente y del abogado |

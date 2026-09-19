@@ -1,6 +1,6 @@
 // Pantalla de calendario: que se sabe, que falta y que dias son inhabiles.
 //
-// Es la vista de **mantenimiento**, no la del dia a dia. El letrado no va a
+// Es la vista de **mantenimiento**, no la del dia a dia. El abogado no va a
 // abrir esto: lo que el mirara son los plazos, y para eso hace falta el motor de
 // dias, que todavia no existe. Lo que esta pantalla evita es el fallo que
 // describe COMPONENTES.md -- que el calendario envejezca en silencio -- poniendo
@@ -14,8 +14,8 @@ use iced::widget::{button, column, container, row, scrollable, text, Space};
 use iced::{Element, Length};
 
 use crate::app::Message;
-use crate::calendario::{Averia, CalendarioError, Festivo, Laguna};
-use crate::estilo;
+use nucleo::calendario::{Averia, CalendarioError, Festivo, Laguna};
+use nucleo::estilo;
 
 // Anchuras de la tabla de cobertura. Fijas y en un solo sitio, porque cabecera
 // y filas tienen que coincidir o la tabla deja de leerse en columna.
@@ -23,8 +23,8 @@ const ANCHO_NIVEL: f32 = 110.0;
 const ANCHO_CIFRA: f32 = 92.0;
 
 pub struct CalendarioState {
-    pub resumen: Result<crate::calendario::Resumen, CalendarioError>,
-    pub municipios: Vec<crate::calendario::Ambito>,
+    pub resumen: Result<nucleo::calendario::Resumen, CalendarioError>,
+    pub municipios: Vec<nucleo::calendario::Ambito>,
     pub seleccion: Option<String>,
     pub anio: i32,
     pub computo: usize,
@@ -36,9 +36,9 @@ impl CalendarioState {
     pub fn cargar() -> Self {
         // Si la base no existe todavia, el ano da igual: la pantalla mostrara
         // el error de `resumen` con la orden que hay que ejecutar.
-        let anio = crate::calendario::anio_base().unwrap_or(0);
-        let resumen = crate::calendario::resumen();
-        let municipios = crate::calendario::municipios().unwrap_or_default();
+        let anio = nucleo::calendario::anio_base().unwrap_or(0);
+        let resumen = nucleo::calendario::resumen();
+        let municipios = nucleo::calendario::municipios().unwrap_or_default();
         let mut estado = Self {
             resumen,
             municipios,
@@ -57,11 +57,11 @@ impl CalendarioState {
     }
 
     pub fn seleccionar(&mut self, ambito: String) {
-        let computo = crate::calendario::COMPUTOS[self.computo];
+        let computo = nucleo::calendario::COMPUTOS[self.computo];
         self.dias =
-            crate::calendario::dias_inhabiles(&ambito, computo, self.anio).unwrap_or_default();
+            nucleo::calendario::dias_inhabiles(&ambito, computo, self.anio).unwrap_or_default();
         self.lagunas =
-            crate::calendario::lagunas(&ambito, computo, self.anio).unwrap_or_default();
+            nucleo::calendario::lagunas(&ambito, computo, self.anio).unwrap_or_default();
         self.seleccion = Some(ambito);
     }
 
@@ -118,7 +118,7 @@ pub fn view(state: &CalendarioState) -> Element<'_, Message> {
     .into()
 }
 
-fn cabecera(resumen: &crate::calendario::Resumen) -> Element<'_, Message> {
+fn cabecera(resumen: &nucleo::calendario::Resumen) -> Element<'_, Message> {
     row![
         estilo::titulo("Calendario de festivos"),
         Space::new().width(Length::Fill),
@@ -132,7 +132,7 @@ fn cabecera(resumen: &crate::calendario::Resumen) -> Element<'_, Message> {
     .into()
 }
 
-fn tabla_cobertura(resumen: &crate::calendario::Resumen) -> Element<'_, Message> {
+fn tabla_cobertura(resumen: &nucleo::calendario::Resumen) -> Element<'_, Message> {
     let encabezado = row![
         estilo::tenue("nivel").width(Length::Fixed(ANCHO_NIVEL)),
         celda_cabecera("confirmado"),
@@ -238,7 +238,7 @@ fn selector(state: &CalendarioState) -> Element<'_, Message> {
     }
 
     let mut computos = row![].spacing(6);
-    for (i, c) in crate::calendario::COMPUTOS.iter().enumerate() {
+    for (i, c) in nucleo::calendario::COMPUTOS.iter().enumerate() {
         let elegido = i == state.computo;
         let boton = button(text(*c).size(12))
             .padding([4, 10])

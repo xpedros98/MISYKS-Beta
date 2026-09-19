@@ -90,8 +90,8 @@ componente es un agente IA**.
 
 | tipo | qué es | dónde corre | por qué |
 |---|---|---|---|
-| **Módulo** | código determinista, sin LLM | donde están sus datos y sus credenciales | `sec.mail` tiene los tokens de acceso al buzón y lee contenido sin anonimizar: corre en el PC del letrado y eso no sale de ahí |
-| **Agente IA** | invoca un modelo de lenguaje | **siempre en el servidor (`maat`)** | ahí está el modelo. Ollama con `qwen2.5:7b`, 12 núcleos y 62 GB de RAM; el portátil del letrado no sostiene eso, y replicarlo en cada equipo no tiene sentido |
+| **Módulo** | código determinista, sin LLM | donde están sus datos y sus credenciales | `sec.mail` tiene los tokens de acceso al buzón y lee contenido sin anonimizar: corre en el PC del abogado y eso no sale de ahí |
+| **Agente IA** | invoca un modelo de lenguaje | **siempre en el servidor (`maat`)** | ahí está el modelo. Ollama con `qwen2.5:7b`, 12 núcleos y 62 GB de RAM; el portátil del abogado no sostiene eso, y replicarlo en cada equipo no tiene sentido |
 
 Los nueve grupos de arriba describen **qué decide** cada componente, no dónde se
 ejecuta. Son módulos los doce de `procesal`, los seis de `calculadora` y los que
@@ -107,7 +107,7 @@ decide el código se lee.
 ### SECRETARIO · despacho
 El canal con **el mundo del despacho**: correo, agenda y avisos. No conoce los
 canales procesales —LexNET, registro, notaría— que pertenecen a `procesal`. Su
-competencia es lo que entra y sale por el correo del letrado, y lo que hay que
+competencia es lo que entra y sale por el correo del abogado, y lo que hay que
 recordar.
 
 **Contrato entrada:** `{cuenta}` → `{documento, resumen, clase, etiquetas[]}`
@@ -128,7 +128,7 @@ La puerta no lee documentos: recibe los datos ya extraídos por `secretario` y
 `archivador`, con varias opciones cuando hay duda, y ante la duda se queda con el plazo
 más corto y marca el resultado `provisional`. Devuelve una **lista** porque una misma
 notificación abre a menudo varios plazos (una sentencia, el de aclaración y el de
-recurso). Si alguno ha vencido, bloquea la ruta y avisa al letrado con la explicación,
+recurso). Si alguno ha vencido, bloquea la ruta y avisa al abogado con la explicación,
 nunca en silencio. Detalle en `COMPONENTES.md`, `pro.caducidad`.
 **Contrato verificación:** `{documento, expediente}` → `{en_plazo, defectos_formales[], destino}`
 
@@ -138,7 +138,7 @@ nunca en silencio. Detalle en `COMPONENTES.md`, `pro.caducidad`.
 
 ### PROBATORIO · prueba
 
-**Contrato:** `{material, tipo_proceso}` → `{estrategia, señalar_al_letrado}`
+**Contrato:** `{material, tipo_proceso}` → `{estrategia, señalar_al_abogado}`
 
 Único grupo que **interrumpe al humano por iniciativa propia**.
 
@@ -269,7 +269,7 @@ deshacerlo.
 **Reinsertar es la mitad difícil.** Un fallo ahí no se ve: produce un escrito
 coherente con el nombre equivocado, que es peor que un escrito roto porque pasa la
 lectura. La reinserción debe ser total o fallar: si al redactar queda un
-`[PERSONA_n]` sin correspondencia en el mapa, el paso aborta y avisa al letrado. No
+`[PERSONA_n]` sin correspondencia en el mapa, el paso aborta y avisa al abogado. No
 se entrega un documento con seudónimos dentro ni se adivina a quién se refería.
 
 #### Verificación — propuesta de condición de uso
@@ -338,7 +338,7 @@ que poder parar a los demás.
 | nivel | grupos | puede |
 |---|---|---|
 | **Bloquean** | `procesal`, `probatorio` | detener la ruta antes de gastar nada |
-| **Interrumpen** | `probatorio`, `secretario` | crear tarea urgente para el letrado |
+| **Interrumpen** | `probatorio`, `secretario` | crear tarea urgente para el abogado |
 | **Condicionan** | `investigador`, `estratega`, `archivador` | alimentar a otros; su error se propaga |
 | **Produce** | `redactor` | generar contenido, nunca decidir |
 | **Veta** | `critico` | devolver el trabajo antes de la salida |
@@ -370,7 +370,7 @@ La numeración de secciones se conserva a propósito: hay referencias a `§8.3` 
 ## 3 · La espina dorsal
 
 ```
-sec.mail | pro.lexnet    llega algo — o el letrado abre el asunto
+sec.mail | pro.lexnet    llega algo — o el abogado abre el asunto
 sec.ocr · sec.clasificador   normaliza y clasifica
 pro.puerta     ¿hay tiempo? ¿faltan requisitos previos?      BLOQUEANTE
                ── archivador · estratega · probatorio ──
@@ -396,7 +396,7 @@ envuelve al trabajo:
 Cuatro consecuencias:
 
 **El secretario está en las 89 rutas**, y en las dos puntas. Todo entra y sale por
-él, incluso cuando el impulso es del letrado: entonces la entrada es el registro del
+él, incluso cuando el impulso es del abogado: entonces la entrada es el registro del
 encargo y la salida sigue siendo una entrega.
 
 **El procesal valida dos veces, y la segunda no es redundante.** Entre la puerta y la
@@ -409,7 +409,7 @@ sabe recibir y entregar, no sabe de plazos. El procesal calcula y determina dest
 pero no tiene acceso a ningún canal. La separación es lo que hace auditables a los
 dos.
 
-**El letrado no verifica los plazos: los recibe.** Se diseña pensando en un despacho
+**El abogado no verifica los plazos: los recibe.** Se diseña pensando en un despacho
 de un solo abogado, al que el sistema tiene que quitar trabajo, no dárselo. Como nadie
 revisa después las fechas que calcula `procesal`, la garantía se reparte entre las dos
 capas del envoltorio. `procesal` responde de la **corrección**: `pro.calendario` no se
@@ -450,7 +450,7 @@ ocurre **antes** del pleito, **durante** y **después**.
 89 tipos × 9 grupos, con disparador y destino de salida.
 `1` siempre · `c` condicional · `0` no interviene
 
-**Disparadores:** letrado 59 · secretario 22 · workflow 6 · agenda 2
+**Disparadores:** abogado 59 · secretario 22 · workflow 6 · agenda 2
 **Destinos:** lexnet 59 · admin 12 · cliente 8 · notarial 6 · burofax 2 · smac 1 · policial 1
 
 Tres lecturas:
@@ -464,51 +464,51 @@ Tres lecturas:
 
 ```csv
 tipo,arq,origen,secretario,archivador,procesal,estratega,probatorio,calculadora,investigador,redactor,critico,salida
-demanda_laboral,B,letrado,1,1,1,c,1,1,1,1,1,lexnet
-despido_objetivo,B,letrado,1,1,1,c,1,1,1,1,1,lexnet
-despido_colectivo,F,letrado,1,1,1,c,1,1,1,1,1,lexnet
+demanda_laboral,B,abogado,1,1,1,c,1,1,1,1,1,lexnet
+despido_objetivo,B,abogado,1,1,1,c,1,1,1,1,1,lexnet
+despido_colectivo,F,abogado,1,1,1,c,1,1,1,1,1,lexnet
 papeleta_conciliacion,C,workflow,1,1,1,0,0,c,0,1,c,smac
-reclamacion_cantidad,B,letrado,1,1,1,c,1,1,1,1,1,lexnet
+reclamacion_cantidad,B,abogado,1,1,1,c,1,1,1,1,1,lexnet
 impugnacion_sancion,A,secretario,1,1,1,1,1,0,1,1,1,lexnet
 modificacion_sustancial,B,secretario,1,1,1,c,1,1,1,1,1,lexnet
-extincion_art_50,E,letrado,1,1,1,c,1,1,1,1,1,lexnet
-tutela_derechos_fundamentales,E,letrado,1,1,1,c,1,0,1,1,1,lexnet
+extincion_art_50,E,abogado,1,1,1,c,1,1,1,1,1,lexnet
+tutela_derechos_fundamentales,E,abogado,1,1,1,c,1,0,1,1,1,lexnet
 demanda_seguridad_social,A,secretario,1,1,1,1,1,c,1,1,1,lexnet
 reclamacion_previa_ss,H,secretario,1,1,1,c,0,0,c,1,c,admin
-conflicto_colectivo,E,letrado,1,1,1,c,c,0,1,1,1,lexnet
-recargo_prestaciones,A,letrado,1,1,1,1,1,1,1,1,1,lexnet
-carta_despido,G,letrado,1,1,1,0,c,1,1,1,1,cliente
-monitorio,B,letrado,1,1,1,c,1,1,c,1,1,lexnet
-demanda_civil,E,letrado,1,1,1,c,1,c,1,1,1,lexnet
-juicio_verbal,E,letrado,1,1,1,c,1,c,1,1,1,lexnet
+conflicto_colectivo,E,abogado,1,1,1,c,c,0,1,1,1,lexnet
+recargo_prestaciones,A,abogado,1,1,1,1,1,1,1,1,1,lexnet
+carta_despido,G,abogado,1,1,1,0,c,1,1,1,1,cliente
+monitorio,B,abogado,1,1,1,c,1,1,c,1,1,lexnet
+demanda_civil,E,abogado,1,1,1,c,1,c,1,1,1,lexnet
+juicio_verbal,E,abogado,1,1,1,c,1,c,1,1,1,lexnet
 contestacion_demanda,A,secretario,1,1,1,1,1,0,1,1,1,lexnet
 recurso_apelacion,A,secretario,1,1,1,1,c,0,1,1,1,lexnet
-juicio_cambiario,B,letrado,1,1,1,c,1,1,c,1,1,lexnet
-nulidad_clausulas_abusivas,A,letrado,1,1,1,1,1,1,1,1,1,lexnet
-reclamacion_danos,B,letrado,1,1,1,c,1,1,1,1,1,lexnet
-division_cosa_comun,E,letrado,1,1,1,c,1,1,1,1,1,lexnet
-demanda_desahucio,B,letrado,1,1,1,c,1,1,1,1,1,lexnet
-desahucio_expiracion_plazo,E,letrado,1,1,1,c,1,c,1,1,1,lexnet
-precario,E,letrado,1,1,1,c,1,0,1,1,1,lexnet
+juicio_cambiario,B,abogado,1,1,1,c,1,1,c,1,1,lexnet
+nulidad_clausulas_abusivas,A,abogado,1,1,1,1,1,1,1,1,1,lexnet
+reclamacion_danos,B,abogado,1,1,1,c,1,1,1,1,1,lexnet
+division_cosa_comun,E,abogado,1,1,1,c,1,1,1,1,1,lexnet
+demanda_desahucio,B,abogado,1,1,1,c,1,1,1,1,1,lexnet
+desahucio_expiracion_plazo,E,abogado,1,1,1,c,1,c,1,1,1,lexnet
+precario,E,abogado,1,1,1,c,1,0,1,1,1,lexnet
 oposicion_ejecucion,A,secretario,1,1,1,1,1,1,1,1,1,lexnet
-medidas_cautelares,I,letrado,1,1,1,c,1,c,1,1,1,lexnet
-contrato_arrendamiento,G,letrado,1,1,1,0,0,c,1,1,1,cliente
-divorcio_mutuo_acuerdo,E,letrado,1,1,1,c,c,1,1,1,1,lexnet
-divorcio_contencioso,E,letrado,1,1,1,c,1,1,1,1,1,lexnet
-convenio_regulador,G,letrado,1,1,1,0,0,1,1,1,1,cliente
-medidas_paternofiliales,E,letrado,1,1,1,c,1,1,1,1,1,lexnet
-modificacion_medidas,A,letrado,1,1,1,1,1,1,1,1,1,lexnet
-reclamacion_alimentos,B,letrado,1,1,1,c,1,1,1,1,1,lexnet
-liquidacion_gananciales,F,letrado,1,1,1,c,1,1,1,1,1,lexnet
-medidas_apoyo,E,letrado,1,1,1,c,1,0,1,1,1,lexnet
-orden_proteccion,D,letrado,1,1,1,c,1,0,1,1,1,lexnet
-declaracion_herederos,E,letrado,1,1,1,0,1,0,1,1,1,notarial
-cuaderno_particional,F,letrado,1,1,1,0,1,1,1,1,1,notarial
-aceptacion_renuncia_herencia,G,letrado,1,1,1,0,c,c,1,1,1,notarial
-impugnacion_testamento,A,letrado,1,1,1,1,1,0,1,1,1,lexnet
-reclamacion_legitima,B,letrado,1,1,1,c,1,1,1,1,1,lexnet
-denuncia_penal,D,letrado,1,1,1,0,1,0,1,1,1,policial
-querella,D,letrado,1,1,1,c,1,0,1,1,1,lexnet
+medidas_cautelares,I,abogado,1,1,1,c,1,c,1,1,1,lexnet
+contrato_arrendamiento,G,abogado,1,1,1,0,0,c,1,1,1,cliente
+divorcio_mutuo_acuerdo,E,abogado,1,1,1,c,c,1,1,1,1,lexnet
+divorcio_contencioso,E,abogado,1,1,1,c,1,1,1,1,1,lexnet
+convenio_regulador,G,abogado,1,1,1,0,0,1,1,1,1,cliente
+medidas_paternofiliales,E,abogado,1,1,1,c,1,1,1,1,1,lexnet
+modificacion_medidas,A,abogado,1,1,1,1,1,1,1,1,1,lexnet
+reclamacion_alimentos,B,abogado,1,1,1,c,1,1,1,1,1,lexnet
+liquidacion_gananciales,F,abogado,1,1,1,c,1,1,1,1,1,lexnet
+medidas_apoyo,E,abogado,1,1,1,c,1,0,1,1,1,lexnet
+orden_proteccion,D,abogado,1,1,1,c,1,0,1,1,1,lexnet
+declaracion_herederos,E,abogado,1,1,1,0,1,0,1,1,1,notarial
+cuaderno_particional,F,abogado,1,1,1,0,1,1,1,1,1,notarial
+aceptacion_renuncia_herencia,G,abogado,1,1,1,0,c,c,1,1,1,notarial
+impugnacion_testamento,A,abogado,1,1,1,1,1,0,1,1,1,lexnet
+reclamacion_legitima,B,abogado,1,1,1,c,1,1,1,1,1,lexnet
+denuncia_penal,D,abogado,1,1,1,0,1,0,1,1,1,policial
+querella,D,abogado,1,1,1,c,1,0,1,1,1,lexnet
 escrito_defensa,A,secretario,1,1,1,1,1,0,1,1,1,lexnet
 escrito_acusacion,A,workflow,1,1,1,1,1,0,1,1,1,lexnet
 personacion_acusacion_particular,I,secretario,1,1,1,c,0,0,0,1,c,lexnet
@@ -516,43 +516,43 @@ recurso_reforma,A,secretario,1,1,1,1,c,0,1,1,1,lexnet
 recurso_apelacion_penal,A,secretario,1,1,1,1,c,0,1,1,1,lexnet
 juicio_leve,E,secretario,1,1,1,c,1,0,1,1,1,lexnet
 conformidad,B,workflow,1,1,1,c,c,1,1,1,1,lexnet
-habeas_corpus,I,letrado,1,1,1,c,0,0,c,1,c,lexnet
-libertad_provisional,I,letrado,1,1,1,c,c,0,c,1,c,lexnet
+habeas_corpus,I,abogado,1,1,1,c,0,0,c,1,c,lexnet
+libertad_provisional,I,abogado,1,1,1,c,c,0,c,1,c,lexnet
 recurso_alzada,A,secretario,1,1,1,1,c,0,1,1,1,admin
 recurso_reposicion,A,secretario,1,1,1,1,c,0,1,1,1,admin
 alegaciones_sancionador,A,secretario,1,1,1,1,c,0,1,1,1,admin
-responsabilidad_patrimonial,B,letrado,1,1,1,0,1,1,1,1,1,admin
+responsabilidad_patrimonial,B,abogado,1,1,1,0,1,1,1,1,1,admin
 reclamacion_economico_administrativa,A,secretario,1,1,1,1,1,1,1,1,1,admin
 recurso_contencioso,A,secretario,1,1,1,1,c,0,1,1,1,lexnet
-concurso_acreedores,F,letrado,1,1,1,c,1,1,1,1,1,lexnet
-constitucion_sociedad,G,letrado,1,1,1,0,0,c,1,1,1,notarial
+concurso_acreedores,F,abogado,1,1,1,c,1,1,1,1,1,lexnet
+constitucion_sociedad,G,abogado,1,1,1,0,0,c,1,1,1,notarial
 impugnacion_acuerdos_sociales,A,secretario,1,1,1,1,1,0,1,1,1,lexnet
-responsabilidad_administradores,E,letrado,1,1,1,c,1,1,1,1,1,lexnet
-pacto_socios,G,letrado,1,1,1,0,0,0,1,1,1,cliente
-compraventa_participaciones,G,letrado,1,1,1,0,c,1,1,1,1,notarial
-disolucion_liquidacion,F,letrado,1,1,1,0,1,1,1,1,1,notarial
-reclamacion_cambiaria,B,letrado,1,1,1,c,1,1,c,1,1,lexnet
-arraigo,E,letrado,1,1,1,0,1,0,1,1,1,admin
-nacionalidad,E,letrado,1,1,1,0,1,0,1,1,1,admin
+responsabilidad_administradores,E,abogado,1,1,1,c,1,1,1,1,1,lexnet
+pacto_socios,G,abogado,1,1,1,0,0,0,1,1,1,cliente
+compraventa_participaciones,G,abogado,1,1,1,0,c,1,1,1,1,notarial
+disolucion_liquidacion,F,abogado,1,1,1,0,1,1,1,1,1,notarial
+reclamacion_cambiaria,B,abogado,1,1,1,c,1,1,c,1,1,lexnet
+arraigo,E,abogado,1,1,1,0,1,0,1,1,1,admin
+nacionalidad,E,abogado,1,1,1,0,1,0,1,1,1,admin
 recurso_denegacion,A,secretario,1,1,1,1,c,0,1,1,1,admin
 recurso_expulsion,A,secretario,1,1,1,1,c,0,1,1,1,admin
-burofax_requerimiento,H,letrado,1,1,1,0,c,c,c,1,c,burofax
-reclamacion_extrajudicial,H,letrado,1,1,1,0,c,c,c,1,c,burofax
-acuerdo_transaccional,H,letrado,1,1,1,0,0,1,1,1,1,cliente
-solicitud_mediacion,H,letrado,1,1,1,0,0,0,0,1,c,admin
+burofax_requerimiento,H,abogado,1,1,1,0,c,c,c,1,c,burofax
+reclamacion_extrajudicial,H,abogado,1,1,1,0,c,c,c,1,c,burofax
+acuerdo_transaccional,H,abogado,1,1,1,0,0,1,1,1,1,cliente
+solicitud_mediacion,H,abogado,1,1,1,0,0,0,0,1,c,admin
 suspension_vista,I,agenda,1,1,1,c,0,0,0,1,c,lexnet
 aportacion_documental,I,workflow,1,1,1,c,c,0,0,1,c,lexnet
 subsanacion_defectos,I,secretario,1,1,1,c,0,0,c,1,c,lexnet
 proposicion_prueba,I,agenda,1,1,1,c,1,0,c,1,c,lexnet
-desistimiento,I,letrado,1,1,1,c,0,0,0,1,c,lexnet
-justicia_gratuita,I,letrado,1,1,1,0,c,c,0,1,c,admin
+desistimiento,I,abogado,1,1,1,c,0,0,0,1,c,lexnet
+justicia_gratuita,I,abogado,1,1,1,0,c,c,0,1,c,admin
 recurso_reposicion_procesal,I,secretario,1,1,1,1,0,0,c,1,c,lexnet
 ejecucion_titulo_judicial,J,workflow,1,1,1,c,c,1,0,1,c,lexnet
-ejecucion_hipotecaria,J,letrado,1,1,1,c,1,1,c,1,c,lexnet
-ejecucion_familia,J,letrado,1,1,1,c,c,1,0,1,c,lexnet
-hoja_encargo,G,letrado,1,1,1,0,0,1,0,1,c,cliente
+ejecucion_hipotecaria,J,abogado,1,1,1,c,1,1,c,1,c,lexnet
+ejecucion_familia,J,abogado,1,1,1,c,c,1,0,1,c,lexnet
+hoja_encargo,G,abogado,1,1,1,0,0,1,0,1,c,cliente
 minuta_honorarios,G,workflow,1,1,1,0,0,1,0,1,c,cliente
-provision_fondos,G,letrado,1,1,1,0,0,1,0,1,c,cliente
+provision_fondos,G,abogado,1,1,1,0,0,1,0,1,c,cliente
 ```
 
 ---
@@ -619,7 +619,7 @@ pro.plazo-vivo · pro.forma → pro.lexnet → pro.acuse                        
 
 **`demanda_laboral`**
 ```
-sec.mail              el letrado abre el asunto
+sec.mail              el abogado abre el asunto
 pro.calendario · pro.caducidad
                      PUERTA — 20 días HÁBILES desde el despido (art. 59.3 ET)
                      caducidad, no prescripción: no se interrumpe, solo se suspende
@@ -637,7 +637,7 @@ pro.plazo-vivo · pro.forma → pro.lexnet → pro.acuse                        
 
 **`reclamacion_cantidad`**
 ```
-sec.mail              el letrado abre el asunto
+sec.mail              el abogado abre el asunto
 pro.prescripcion     PUERTA — 1 año (art. 59 ET), CORRE POR PARTIDA
                      no es sí/no: filtra los conceptos ya prescritos
 pru.inventario       nóminas, convenio, registro de jornada
@@ -651,7 +651,7 @@ pro.plazo-vivo · pro.forma → pro.lexnet → pro.acuse                        
 
 **`demanda_desahucio`**
 ```
-sec.mail              el letrado abre el asunto
+sec.mail              el abogado abre el asunto
 pro.procedibilidad   PUERTA — ¿hubo requerimiento previo fehaciente?
                      de ello depende que el arrendatario pueda ENERVAR (art. 22.4 LEC)
 pru.autenticidad     contrato, impagos, burofax con acuse
@@ -667,7 +667,7 @@ pro.plazo-vivo · pro.forma → pro.lexnet → pro.acuse                        
 
 **`papeleta_conciliacion`**
 ```
-sec.mail              el letrado abre el asunto
+sec.mail              el abogado abre el asunto
 pro.caducidad        PUERTA — comparte el reloj de la demanda; presentarla SUSPENDE
 red.tramite          plantilla ligera, SIN investigador
 cri.formal           mínimo: partes y coherencia con la demanda futura
@@ -686,7 +686,7 @@ verificar que los hechos colman TODOS los elementos del tipo.
 
 **`denuncia_penal`**
 ```
-sec.mail              el letrado abre el asunto
+sec.mail              el abogado abre el asunto
 pro.prescripcion     PUERTA — según pena en abstracto (art. 131 CP)
                      depende de una calificación que aún no se ha hecho → reevaluar
 [anonimizar]         middleware, antes de cualquier LLM
@@ -699,7 +699,7 @@ pro.forma · pro.destino → pro.registro → pro.acuse          juzgado o comis
 
 **`querella`**
 ```
-sec.mail              el letrado abre el asunto
+sec.mail              el abogado abre el asunto
 pro.prescripcion · pro.procedibilidad
                      PUERTA — prescripción + legitimación + poder especial
 [anonimizar]
@@ -719,7 +719,7 @@ pro.plazo-vivo · pro.forma → pro.lexnet → pro.acuse                        
 
 **`demanda_civil`**
 ```
-sec.mail              el letrado abre el asunto
+sec.mail              el abogado abre el asunto
 pro.prescripcion     PUERTA — prescripción de la acción ejercitada
 cal.cuantia          PUERTA 2 — la cuantía decide cauce y postulación:
                      resolverla ANTES de redactar, no después
@@ -736,7 +736,7 @@ pro.plazo-vivo · pro.forma → pro.lexnet → pro.acuse                        
 
 **`concurso_acreedores`**
 ```
-sec.mail              el letrado abre el asunto
+sec.mail              el abogado abre el asunto
 pro.caducidad        PUERTA — 2 meses desde conocida la insolvencia
                      el plazo NO protege al cliente, LE OBLIGA: incumplirlo abre la
                      puerta a calificación culpable y responsabilidad personal
@@ -759,7 +759,7 @@ pro.plazo-vivo · pro.forma → pro.lexnet → pro.acuse            Juzgado de l
 
 **`contrato_arrendamiento`**
 ```
-sec.mail              el letrado abre el asunto
+sec.mail              el abogado abre el asunto
 — sin puerta de plazo —           no hay acto que buscar en la tabla de plazos
 inv.normativa        LAU 29/1994 y sus LÍMITES IMPERATIVOS: duración mínima,
                      prórrogas, fianza legal, actualización, zonas tensionadas
@@ -820,7 +820,7 @@ sec.agenda           avisos de vencimiento, prórroga y actualización anual
 **Implementado — `sec.mail`**
 
 Primer componente implementado, y es un módulo. Correo por **Gmail API autenticada
-con OAuth** (§8.6) y almacenamiento local cifrado. Corre en el ordenador del letrado. **Hoy no
+con OAuth** (§8.6) y almacenamiento local cifrado. Corre en el ordenador del abogado. **Hoy no
 sube nada al servidor**: el resumen que lo haría sigue pendiente (más abajo). Cuando
 exista, subirá sin filtrar — `anonimizar` no está implementado (§1).
 
@@ -844,15 +844,15 @@ acciones`.
 El Backend sigue sin más dependencia que `sqlcipher3`: el flujo OAuth y las dos APIs
 van con la librería estándar (`urllib`, `http.server`).
 
-Frontend (`iced`): pantalla **Calendario** nueva (`src/calendario.rs` +
-`src/screens/calendario.rs`), que lee `calendario.db` en **solo lectura** y sin clave
+Frontend (`iced`): pantalla **Calendario** (hoy `nucleo/src/calendario.rs` +
+`Frontend_Admin/src/screens/calendario.rs`), que lee `calendario.db` en **solo lectura** y sin clave
 --no está cifrada-- y muestra la cobertura por nivel, las averías con su motivo y los
 días inhábiles de un municipio con la marca de qué nivel aporta cada uno. Es vista de
 mantenimiento, no del día a día: existe para que el calendario no envejezca en
 silencio. La cadena de ámbitos se resuelve con un **CTE recursivo** en SQL, así que el
 frontend no necesita saber cuántos niveles hay.
 
-Sobre el **acoplamiento de esquema**: `secretario.rs` y `calendario.rs` conocen el
+Sobre el **acoplamiento de esquema**: `nucleo/src/secretario.rs` y `nucleo/src/calendario.rs` conocen el
 esquema de las bases que escribe el Backend, y nada ata las dos mitades. Mitigación en
 `calendario.rs`: `comprobar_esquema` verifica las columnas que usa y falla nombrando
 la que falte, en vez de devolver una lista vacía que parece un calendario sin
@@ -860,6 +860,64 @@ festivos. Las consultas de Rust y Python se han contrastado sobre la base real -
 casos, mismos días y mismas lagunas-- pero eso es una comprobación puntual, no un
 mecanismo; si el acoplamiento crece, la alternativa es que el frontend pida los datos
 por la CLI.
+
+**Dos aplicaciones, no dos modos de una.** `Frontend` es la del abogado y
+`Frontend_Admin` la de control, y se compilan por separado: el binario que recibe un
+despacho **no lleva dentro** las pantallas de mantenimiento. Un interruptor las habría
+escondido, no quitado.
+
+| | abogado (`misyks-beta-frontend`) | control (`misyks-beta-admin`) |
+|---|---|---|
+| secciones | Inicio · Expedientes · Secretario · Ajustes | Calendario (cobertura y averías) |
+| para quién | el despacho | el equipo que mantiene MISYKS |
+| título | MISYKS — Usuario | MISYKS — Administrador |
+| fondo | claro | **negro** |
+
+**El fondo distingue antes que el título.** Las dos se parecen —misma barra, mismas
+tarjetas— y van a estar abiertas a la vez en la misma pantalla: confundirlas es tocar el
+mantenimiento creyendo que trabajas. Funciona porque aquí el texto no lleva color fijo,
+sale del tema; un gris fijo habría quedado invisible sobre negro.
+
+El reparto no lo decidió este cambio: `calendario.rs` ya decía en su cabecera «el abogado
+no va a abrir esto», porque enseña la cobertura del calendario de festivos y sus averías,
+no los plazos de nadie.
+
+**Los Ajustes se quedan con el abogado** aunque sean puesta a punto. El permiso de la
+cuenta caduca —cada siete días mientras la app de Google siga en *Testing*— y quien tiene
+que volver a darlo es él, en su navegador y con su cuenta; dejarlos solo en la aplicación
+de control le habría quitado la forma de reconectar su propio correo. Y una cuenta
+revocada **no da ningún error**: deja de entrar correo, sin más. Por eso el aviso aparece
+arriba, en cualquier sección, con un botón que lleva a reconectarla: lo que se ha roto se
+enseña donde se está trabajando.
+
+**`windows_subsystem` en las compilaciones de entrega.** Sin él, Windows trata el binario
+como programa de consola y abre una ventana negra al lado de la aplicación —no se ve con
+`cargo run`, sí con doble clic—. En depuración se conserva la consola a propósito: es
+donde sale un pánico.
+
+**Y esto tampoco es seguridad.** Las bases y la configuración están en la misma máquina,
+así que quien quiera mirar, mira. Lo que se gana es que no se distribuye código de
+diagnóstico con la herramienta de trabajo, y que ninguna de las dos aplicaciones tiene
+pantallas que estorben a lo suyo.
+
+**Un workspace, tres crates.** Lo común —`local_config`, `backend`, `estilo` y los tres
+módulos de acceso a datos— vive en **`nucleo`** y se comparte, no se copia. La frontera
+es `Message`: lo que no lo menciona se puede compartir, y las pantallas no, porque cada
+aplicación tiene sus mensajes. Dos copias de `local_config.rs` acabarían escribiendo con
+reglas distintas el archivo que guarda el refresh token del correo y las claves de las
+bases, que es exactamente el fichero que menos conviene tener por duplicado.
+
+**Conectar cuenta ya no bloquea la ventana.** Era el último bloqueo síncrono dentro de
+`update`, y el peor: espera a que una persona elija cuenta en el navegador, hasta cinco
+minutos. Mientras tanto el bucle de eventos de `iced` estaba parado, la ventana no
+repintaba y el navegador podía abrirse **detrás** de ella; desde fuera parecía que el
+botón no hacía nada, y así se vio en macOS. Ahora `update` devuelve `Task`, el
+consentimiento corre en un hilo aparte —es una espera bloqueante de un subproceso, no
+trabajo asíncrono: meterlo en el ejecutor ocuparía un hilo igual, disimulado— y la
+pantalla dice **«Abriendo el navegador… si no lo ves, búscalo detrás de esta
+ventana»**. El botón queda muerto mientras tanto: dos consentimientos a la vez abren dos
+navegadores y solo uno guarda el token. `Refrescar` sigue siendo síncrono, pero eso
+tarda medio segundo, no minutos.
 
 Frontend (`iced`): botón **Refrescar** en la pantalla Secretario invoca
 `sincronizar --limite 5` como subproceso y recarga la lista. Ajustes ya no tiene
@@ -890,7 +948,7 @@ Decisiones que conviene no perder:
 - **Inventario: el cursor se pide antes de listar.** Si se pidiera después, los
   correos llegados durante el recorrido quedarían por debajo del cursor y no los
   vería nadie nunca.
-- **Sincronización en solo lectura.** El módulo lee sin marcar como leído: el letrado
+- **Sincronización en solo lectura.** El módulo lee sin marcar como leído: el abogado
   sigue viendo su bandeja intacta desde sus propios dispositivos.
 - **Sincronización en tandas.** `--limite N` corta la descarga a los N pendientes más
   antiguos; el resto se queda en la cola para la llamada siguiente.
@@ -956,9 +1014,6 @@ Del paso a OAuth:
 - **Una cuenta por proveedor.** El esquema ya guarda `cuenta` en cada correo, pero
   `config` elige un único proveedor activo: varias cuentas a la vez no están
   resueltas.
-- **El consentimiento bloquea la interfaz.** Conectar una cuenta desde Ajustes lanza
-  un subproceso síncrono que espera a que alguien acepte en el navegador. Es el
-  candidato más claro a `Task` asíncrona de `iced`.
 - **Adaptador del tercer mundo: no existe, y ya no hay esqueleto.** `imap.py` se ha
   borrado. No lo importaba nadie —`correo.abrir()` solo conoce `google` y
   `microsoft`— y lo que contenía era el Gmail de antes de OAuth: host fijo
@@ -985,8 +1040,9 @@ donde `sec.mail`, porque usa sus tokens.
 | ruta de la base y ventana por defecto | `sec/agenda/config.py` |
 | CLI | `sec/agenda/__main__.py` |
 
-Superficie: `sincronizar · agenda · colisiones · clasificar · plazo · publicar ·
+Superficie: `sincronizar · agenda · colisiones · apuntar · clasificar · publicar ·
 acciones`. Tablas: `eventos · sincronizacion · acciones`, en `~/.misyks/sec_agenda.db`.
+Los plazos no están entre ellas: son hitos del expediente y aquí solo se proyectan.
 
 **Lo compartido se ha separado: `sec/cuentas/`.** El consentimiento es uno por cuenta
 y trae correo y calendario juntos, así que la sección `[oauth.google]` no es de
@@ -1020,7 +1076,7 @@ Decisiones que conviene no perder:
   ha movido fuera; descartarlo dejaría la fila vieja mintiendo. El adaptador no
   recorta: no sabe qué hay guardado.
 - **Hora local e instante, los dos.** Un evento es una hora local con una zona, no un
-  instante (§8.6). Se guarda la hora que el letrado reconoce **y** el instante en UTC
+  instante (§8.6). Se guarda la hora que el abogado reconoce **y** el instante en UTC
   que sale del desplazamiento del propio RFC 3339. Los solapes se comparan por
   instante: hacerlo por hora local inventa colisiones entre zonas y silencia las
   reales. El desplazamiento viene en el dato, así que no hace falta `zoneinfo` ni el
@@ -1031,8 +1087,18 @@ Decisiones que conviene no perder:
 - **Lo cancelado no se borra.** Un señalamiento que se cae es información; se marca y
   queda en el registro de acciones.
 - **Lo clasificado a mano no se pisa.** Una sincronización posterior actualiza el
-  título o la hora, pero no el `tipo` ni el `letrado`: eso lo puso alguien que sabía
+  título o la hora, pero no el `tipo` ni el `abogado`: eso lo puso alguien que sabía
   algo que la API no dice.
+- **Los plazos no viven aquí: se proyectan del expediente.** Estuvieron un día en
+  `sec.agenda` con su propia vida y su propia fecha, hasta que se vio que un plazo y un
+  hito de clase `limite` del expediente **son la misma cosa guardada dos veces**, que
+  es exactamente el fallo contra el que avisa el resto de este documento. Ahora la
+  verdad es el hito; `agent.agenda()` lee los expedientes abiertos y devuelve sus hitos
+  con fecha mezclados con lo propio, cada fila con su `origen_fila`. Marcar un hito
+  como hecho se ve en la agenda al instante porque no hay nada que copiar.
+- **Lo que ponen las personas no se pisa.** `tipo` y `abogado` están protegidos: una
+  sincronización del calendario cambia la hora y el título de un evento, pero no lo
+  que alguien clasificó a mano.
 - **Escribir en el calendario es a petición.** `publicar` existe y `sincronizar` no
   escribe nunca. Publicar algo que vino del calendario se rechaza: lo duplicaría.
 - **Publicar adopta el identificador del proveedor.** Al crear el evento allí, la fila
@@ -1079,7 +1145,7 @@ Decisiones que conviene no perder:
   de resultados (hace falta un calendario con más de 2500 eventos), una ocurrencia
   suelta movida o anulada dentro de una serie, y los eventos con zona horaria
   distinta de la del calendario, que solo se han visto contra el adaptador falso.
-- **Tiempos medidos** (18/09/2026, calendario pequeño, portátil del letrado): consultar
+- **Tiempos medidos** (18/09/2026, calendario pequeño, portátil del abogado): consultar
   lo ya guardado —`agenda`, `colisiones`— es instantáneo, 0,000 s, porque no toca red;
   una llamada a la Calendar API, 0,37 s; una sincronización entera, 0,22 s. Google
   entrega hasta 2500 eventos por página, así que un calendario normal de despacho cabe
@@ -1090,21 +1156,15 @@ Decisiones que conviene no perder:
 - **Solo Google.** El adaptador de Microsoft Graph para calendario no está escrito;
   `calendario.abrir` lo dice con todas las letras en vez de fallar de forma rara.
   CalDAV (tercer mundo) tampoco.
-- **Un solo calendario y un solo letrado.** Se lee `primary` de la cuenta conectada, y
-  el letrado *es* la cuenta. Cruzar agendas entre letrados del despacho —que
+- **Un solo calendario y un solo abogado.** Se lee `primary` de la cuenta conectada, y
+  el abogado *es* la cuenta. Cruzar agendas entre abogados del despacho —que
   COMPONENTES.md exige— ya funciona en la consulta (las colisiones marcan `despacho`
-  frente a `mismo_letrado`), pero hoy no hay de dónde sacar una segunda agenda.
-- **El «Hecho» del letrado y los estados del plazo, sin implementar.** Los define
-  `pro.caducidad` en COMPONENTES.md —un plazo vive `abierto · en_pausa · cumplido ·
-  vencido · cancelado`, y el letrado puede cerrarlo con un clic si presentó por su
-  cuenta fuera de MISYKS—. Lo que hay hoy en `sec.agenda` anota fechas y avisa si se
-  adelantan, pero un plazo no tiene estado: no se puede dar por cumplido, así que los
-  avisos de algo ya presentado seguirían sonando. Es la deuda más clara del módulo, y
-  arrastra también la distinción que pide `pro.acuse` entre cumplido **acreditado**
-  (con justificante) y cumplido **declarado** (por el letrado).
-- **Nadie llama a `anotar_plazo`.** Lo hará `pro.calendario` cuando tenga motor de
-  días. Mientras tanto se anota por la CLI, que es también como se comprueba que el
-  aviso de adelanto funciona.
+  frente a `mismo_abogado`), pero hoy no hay de dónde sacar una segunda agenda.
+- **Las fechas de los hitos hay que teclearlas.** Las producirá `pro.caducidad`
+  cuando exista; hoy se ponen con `expedientes fechar`.
+- **La vida del hito no dispara nada todavía.** Un plazo hecho deja de avisar cuando
+  exista `sec.notificador`, que es quien avisa; hoy lo único que cambia es lo que se
+  ve en la barra y en la agenda.
 - **Sin pantalla en el Frontend.** No hay vista de agenda; se usa por CLI.
 
 **Implementado — `expedientes`: la ficha, no la ruta**
@@ -1121,11 +1181,12 @@ tipo determina ruta, plazos y canal de salida.
 | base SQLCipher | `expedientes/db.py` |
 | interfaz al resto del sistema | `expedientes/agent.py` |
 | CLI | `expedientes/__main__.py` |
-| pantalla (iced) | `Frontend/src/screens/expedientes.rs` + `src/expedientes.rs` |
+| pantalla (iced) | `Frontend/src/screens/expedientes.rs` + `nucleo/src/expedientes.rs` |
 | vista de un expediente: la barra de nodos | `Frontend/src/screens/detalle.rs` |
 
-Superficie: `tipos · abrir · listar · hitos · fechar · cerrar · eliminar · vaciar`.
-Tablas: `expedientes` e `hitos`, en `~/.misyks/expedientes.db` —cifrada, que aquí no hay
+Superficie: `tipos · abrir · listar · hitos · fechar · hecho · deshacer · pausar ·
+reanudar · prorrogar · cancelar · acciones · cerrar · eliminar · vaciar`. Tablas:
+`expedientes · hitos · acciones`, en `~/.misyks/expedientes.db` —cifrada, que aquí no hay
 debate: lleva el nombre del cliente y el del contrario—.
 
 Decisiones que conviene no perder:
@@ -1149,6 +1210,39 @@ Decisiones que conviene no perder:
 - **Leer directo, escribir por el Backend.** El Frontend lee la base con `rusqlite` y
   escribe invocando `python -m expedientes`. Una lectura desincronizada enseña un dato
   de menos; una escritura desincronizada corrompe.
+- **La vida del hito se recibe, y `vencido` se deriva.** `pendiente · ocurrido ·
+  en_pausa · cancelado` se guardan; **`vencido` no**, se calcula al leer: escribirlo
+  sería el sistema dando un asunto por perdido por su cuenta, y esa decisión es de
+  `pro.caducidad`. Además solo vence un plazo con fecha **firme**: si es `provisional`
+  todavía puede moverse, y con datos dudosos no hay vencido.
+- **El abogado puede marcar un nodo él mismo**, porque la mayor parte del trabajo de un
+  despacho no pasa por el sistema. Queda como realizado **declarado** —lo dice quien lo
+  hizo— frente al **acreditado**, que llegará con el justificante de `pro.acuse`:
+  `cerrado_por` vale `abogado` o `acuse`, y esa diferencia es lo que permite a la
+  auditoría separar lo que consta de lo que se ha dicho. Siempre guarda la **fecha del
+  hecho**, no la del registro, porque de ella cuelgan plazos posteriores —el del
+  silencio administrativo se cuenta desde la presentación—. Y se puede deshacer:
+  marcar es un clic, y los clics se dan sin querer.
+- **`documento_id` está previsto y vacío.** Un hito acreditado debería llevar el
+  documento que lo prueba, pero del expediente todavía no cuelga ningún fichero: la
+  columna existe para que cuando los haya no haya que migrar nada.
+- **Prorrogar es una tercera cosa, y estaba faltando.** Pausa, recálculo y prórroga
+  mueven las tres la fecha y son distintas: la pausa detiene el reloj, el recálculo
+  corrige lo que estaba mal, y la prórroga es el **órgano ampliando** un plazo correcto.
+  Su fecha no se deduce de ninguna regla: viene en una resolución, y se guarda con su
+  referencia. Solo se prorroga un plazo —un señalamiento no se prorroga: se cambia de
+  fecha, y eso lo decide el juzgado—. El hueco lo destapó el ecosistema antiguo, que sí
+  tenía `prorrogar` como acción propia.
+- **Todo lo que le pasa a un hito queda en `acciones`.** Faltaba: los hitos cambiaban de
+  estado sin dejar rastro mientras `sec.agenda` sí registraba lo suyo. No es auditoría
+  por gusto —el contrato de todo lo que toca plazos exige que una fecha se pueda
+  explicar, y una fecha sin su historia solo se puede creer—. Con el registro se
+  reconstruye por qué el vencimiento es el que es: qué lo pauseó, qué lo prorrogó, quién
+  lo dio por hecho y cuándo se supo cada cosa.
+- **Pausar exige motivo y reanudar mueve la fecha.** Una pausa sin causa anotada no se
+  puede explicar después, y una que no mueve el vencimiento es una marca decorativa
+  —que es justo lo que hacía el ecosistema antiguo—. La fecha nueva llega ya
+  recalculada de fuera: aquí no se computa nada.
 - **Los hitos son del expediente, no del tipo.** Se copian de la plantilla al abrirlo
   y a partir de ahí son suyos: un expediente abierto hace tres meses sigue enseñando el
   recorrido con el que nació, aunque la plantilla se haya corregido. Misma razón que
@@ -1170,7 +1264,7 @@ Decisiones que conviene no perder:
   pantalla lo advierte en rojo. Una barra que parece definitiva sin serlo es peor que
   no tenerla.
 - **Un tipo sin plantilla no inventa nodos.** Dice que su recorrido no está escrito.
-- **`Frontend/src/backend.rs`.** Localizar la carpeta del Backend y elegir intérprete
+- **`nucleo/src/backend.rs`.** Localizar la carpeta del Backend y elegir intérprete
   estaba dentro de `secretario.rs` porque `sec.mail` era lo único que se invocaba. Con
   dos módulos ya no es de ninguno: mismo movimiento que `sec/cuentas` en el Backend.
 
@@ -1186,7 +1280,9 @@ Decisiones que conviene no perder:
 - **Los expedientes abiertos antes de que existiera la tabla `hitos` no tienen
   ninguno**, y no se les añaden solos: la pantalla los enseña como un tipo sin
   recorrido escrito.
-- **Poner fechas solo se puede por CLI.** La pantalla enseña la barra; no deja tocarla.
+- **Poner fechas solo se puede por CLI.** La pantalla enseña la barra y deja **marcar un
+  nodo como hecho** (y deshacerlo), que es lo que el abogado necesita a diario; poner o
+  corregir una fecha, pausar y cancelar siguen siendo de la CLI.
 - **Nada cuelga todavía del expediente**: ni documentos, ni correos, ni los eventos de
   `sec.agenda`, que ya tiene la columna `expediente` sin rellenar.
 - **Sin partes ni órgano desde la interfaz.** La base los guarda; la pantalla solo pide
@@ -1223,7 +1319,7 @@ Decisiones que conviene no perder:
 - **Base sin cifrar, y en local igualmente.** Los festivos son dato público del BOE,
   así que `calendario.db` va en SQLite a secas, sin la clave que sí lleva
   `sec_mail.db`. Pero vive en `~/.misyks` y no solo en el servidor: el motor que la
-  consume toca expedientes y corre en el PC del letrado, y una base solo remota
+  consume toca expedientes y corre en el PC del abogado, y una base solo remota
   dejaría al despacho sin poder calcular plazos en cuanto se cayera la red.
 - **Los festivos se guardan dispersos.** Solo los días que lo son. Una fila por día y
   municipio serían unos seis millones de filas, y sobre todo no sabrían distinguir
@@ -1399,7 +1495,7 @@ Unix y **nada en Windows**, donde `~/.misyks/config` heredaba la ACL del perfil.
 Comprobado en una maquina real: `NT AUTHORITY\SYSTEM`, `BUILTIN\Administrators`
 y el propio usuario, los tres con `FullControl`. Ese archivo tiene la contrasena
 de aplicacion de Gmail y la clave de `sec_mail.db`, asi que contradecia la premisa
-de que los secretos no salen de la maquina del letrado.
+de que los secretos no salen de la maquina del abogado.
 
 Resuelto con `icacls`: `/inheritance:r` borra los ACE heredados y `/grant:r` deja
 un unico ACE, el de la cuenta actual (`USERDOMAIN\USERNAME`, o `USERNAME` a secas
@@ -1429,7 +1525,7 @@ de fallar: es lo que hara falta en una app distribuida.
 
 **Ventanas de consola.** Una app de ventana que lanza un ejecutable de consola hace
 parpadear una ventana negra en Windows. `sec.mail` (Python) e `icacls` se lanzan
-ahora con `CREATE_NO_WINDOW` desde `Frontend/src/proceso.rs`, que en el resto de
+ahora con `CREATE_NO_WINDOW` desde `nucleo/src/proceso.rs`, que en el resto de
 plataformas no hace nada.
 
 **El Backend si es instalable en Windows.** Comprobado: `sqlcipher3` 0.6.2 publica
@@ -1557,7 +1653,7 @@ de §8.5.
 **Ubicación de los tokens: sin decidir.** Si `sec.agenda` corre en `maat`, los refresh
 tokens de todos los clientes residen en el servidor; `sec.mail` corre en local por
 tener las credenciales (§8.3). Factores en juego: un componente de vigilancia de
-plazos debe operar con el equipo del letrado apagado, y un repositorio único de credenciales
+plazos debe operar con el equipo del abogado apagado, y un repositorio único de credenciales
 de todos los clientes concentra el impacto de un acceso indebido.
 ---
 
